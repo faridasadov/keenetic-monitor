@@ -2,6 +2,7 @@ const state = {
   routers: [],
   selectedRouterId: null,
   clients: [],
+  metrics: [],
   previousClients: new Map(),
   filter: "all",
   search: "",
@@ -124,6 +125,17 @@ async function loadDashboard() {
 
   renderMetrics(status);
   renderClients();
+  loadClientMetrics();
+}
+
+async function loadClientMetrics() {
+  if (!state.selectedRouterId) return;
+  try {
+    state.metrics = await api(`/routers/${state.selectedRouterId}/client-metrics?limit=600`);
+    renderClients();
+  } catch (_error) {
+    state.metrics = [];
+  }
 }
 
 function renderRouterSelect() {
@@ -173,6 +185,7 @@ function renderClients() {
           <td class="signal ${signalClass(client.signal)}">${signal}</td>
           <td>${client.rx_speed}<div class="muted">${formatBytes(client.rx_bytes)}</div></td>
           <td>${client.tx_speed}<div class="muted">${formatBytes(client.tx_bytes)}</div></td>
+          <td>${renderSparkline(client)}</td>
           <td>${formatTime(client.last_seen)}</td>
         </tr>
       `;
@@ -181,7 +194,39 @@ function renderClients() {
 }
 
 function renderEmpty(message) {
-  els.clientsBody.innerHTML = `<tr><td colspan="8" class="empty">${escapeHtml(message)}</td></tr>`;
+  els.clientsBody.innerHTML = `<tr><td colspan="9" class="empty">${escapeHtml(message)}</td></tr>`;
+}
+
+function renderSparkline(client) {
+  const key = clientKey(client);
+  const rows = state.metrics.filter((row) => row.client_key === key).slice(-24);
+  if (rows.length < 2) return '<span class="muted">-</span>';
+  return `
+    <svg class="spark" viewBox="0 0 118 32" aria-label="Traffic trend">
+      <path class="rx" d="${sparkPath(rows.map((row) => row.rx_bytes), 118, 32)}"></path>
+      <path class="tx" d="${sparkPath(rows.map((row) => row.tx_bytes), 118, 32)}"></path>
+    </svg>
+  `;
+}
+
+function sparkPath(values, width, height) {
+  const usable = values.map((value) => (value === null || value === undefined ? null : Number(value)));
+  const numeric = usable.filter((value) => value !== null);
+  if (numeric.length < 2) return "";
+  const min = Math.min(...numeric);
+  const max = Math.max(...numeric);
+  const range = max - min || 1;
+  const step = width / Math.max(usable.length - 1, 1);
+  let fallback = min;
+  return usable
+    .map((value, index) => {
+      if (value === null) value = fallback;
+      fallback = value;
+      const x = Math.round(index * step);
+      const y = Math.round(height - ((value - min) / range) * (height - 4) - 2);
+      return `${index === 0 ? "M" : "L"}${x},${y}`;
+    })
+    .join(" ");
 }
 
 function escapeHtml(value) {

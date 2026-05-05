@@ -115,6 +115,7 @@ List current state:
 curl http://localhost:8000/routers
 curl http://localhost:8000/routers/{router_id}/status
 curl http://localhost:8000/routers/{router_id}/clients
+curl http://localhost:8000/routers/{router_id}/client-metrics
 ```
 
 ## Polling
@@ -136,6 +137,7 @@ Implemented:
 - Parser normalization for router metrics and clients
 - Real-time poll scheduler with persistent router sessions
 - Web dashboard for router status and client visibility
+- Per-client metrics history and dashboard traffic sparklines
 - TimescaleDB/PostgreSQL schema
 - Grafana datasource and starter dashboard
 - Offline status marking after repeated failures

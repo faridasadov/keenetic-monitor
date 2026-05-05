@@ -155,7 +155,7 @@ input {
 
 table {
   width: 100%;
-  min-width: 920px;
+  min-width: 1040px;
   border-collapse: collapse;
 }
 
@@ -224,6 +224,26 @@ tbody tr:last-child td {
   height: 120px;
   color: var(--muted);
   text-align: center;
+}
+
+.spark {
+  display: block;
+  width: 118px;
+  height: 32px;
+}
+
+.spark path {
+  fill: none;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.spark .rx {
+  stroke: var(--accent);
+}
+
+.spark .tx {
+  stroke: #5b6ee1;
 }
 
 @media (max-width: 760px) {

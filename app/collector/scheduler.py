@@ -11,7 +11,7 @@ from app.collector.keenetic_client import KeeneticClient
 from app.collector.parser import parse_clients, parse_router_metric
 from app.config import get_settings
 from app.db.postgres import SessionLocal
-from app.models import CurrentClient, Router, RouterMetric, RouterStatus, decrypt_secret
+from app.models import ClientMetric, CurrentClient, Router, RouterMetric, RouterStatus, decrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -98,12 +98,10 @@ class PollScheduler:
                     connected = client.get_connected_clients()
 
                     metric = parse_router_metric(router.id, system=system, interfaces=interfaces)
+                    clients = parse_clients(router.id, leases=leases, wifi_clients=wifi, connected_clients=connected)
                     self._write_metric(db, metric)
-                    self._write_clients(
-                        db,
-                        router.id,
-                        parse_clients(router.id, leases=leases, wifi_clients=wifi, connected_clients=connected),
-                    )
+                    self._write_clients(db, router.id, clients)
+                    self._write_client_metrics(db, clients, metric.timestamp)
                     self._mark_success(db, router.id)
                     if isinstance(system, dict):
                         router.model = system.get("model") or router.model
@@ -218,6 +216,28 @@ class PollScheduler:
     def _write_clients(db: Session, router_id: str, rows) -> None:
         db.execute(delete(CurrentClient).where(CurrentClient.router_id == router_id))
         db.add_all(CurrentClient(**row) for row in rows)
+
+    @staticmethod
+    def _write_client_metrics(db: Session, rows, timestamp: datetime) -> None:
+        metrics = []
+        for row in rows:
+            client_key = row.get("mac") or row.get("ip") or row.get("hostname")
+            if not client_key:
+                continue
+            metrics.append(
+                ClientMetric(
+                    time=timestamp,
+                    router_id=row["router_id"],
+                    client_key=client_key,
+                    hostname=row.get("hostname"),
+                    mac=row.get("mac"),
+                    ip=row.get("ip"),
+                    rx_bytes=row.get("rx_bytes"),
+                    tx_bytes=row.get("tx_bytes"),
+                    signal=row.get("signal"),
+                )
+            )
+        db.add_all(metrics)
 
     @staticmethod
     def _mark_success(db: Session, router_id: str) -> None:

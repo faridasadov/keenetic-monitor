@@ -93,6 +93,20 @@ class RouterMetric(Base):
     raw: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
+class ClientMetric(Base):
+    __tablename__ = "client_metrics"
+
+    time: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True, default=utcnow)
+    router_id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True)
+    client_key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    hostname: Mapped[str | None] = mapped_column(String(255))
+    mac: Mapped[str | None] = mapped_column(String(32), index=True)
+    ip: Mapped[str | None] = mapped_column(String(64), index=True)
+    rx_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    tx_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    signal: Mapped[float | None] = mapped_column(Float)
+
+
 class RouterCreate(BaseModel):
     name: str
     site: str | None = None
@@ -145,6 +159,20 @@ class ClientRead(BaseModel):
     tx_bytes: int | None
     signal: float | None
     last_seen: datetime
+
+
+class ClientMetricRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    time: datetime
+    router_id: str
+    client_key: str
+    hostname: str | None
+    mac: str | None
+    ip: str | None
+    rx_bytes: int | None
+    tx_bytes: int | None
+    signal: float | None
 
 
 class StatusRead(BaseModel):

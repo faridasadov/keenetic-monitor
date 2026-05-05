@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -7,6 +7,8 @@ from app.collector.keenetic_client import KeeneticClient
 from app.config import get_settings
 from app.models import (
     ClientRead,
+    ClientMetric,
+    ClientMetricRead,
     CurrentClient,
     Router,
     RouterCreate,
@@ -83,6 +85,23 @@ def delete_router(router_id: str, db: Session = Depends(get_db)) -> None:
 @router.get("/routers/{router_id}/clients", response_model=list[ClientRead])
 def router_clients(router_id: str, db: Session = Depends(get_db)) -> list[CurrentClient]:
     return list(db.scalars(select(CurrentClient).where(CurrentClient.router_id == router_id).order_by(CurrentClient.hostname)))
+
+
+@router.get("/routers/{router_id}/client-metrics", response_model=list[ClientMetricRead])
+def router_client_metrics(
+    router_id: str,
+    limit: int = Query(default=300, ge=1, le=2000),
+    db: Session = Depends(get_db),
+) -> list[ClientMetric]:
+    rows = list(
+        db.scalars(
+            select(ClientMetric)
+            .where(ClientMetric.router_id == router_id)
+            .order_by(ClientMetric.time.desc())
+            .limit(limit)
+        )
+    )
+    return list(reversed(rows))
 
 
 @router.get("/routers/{router_id}/status", response_model=StatusRead)

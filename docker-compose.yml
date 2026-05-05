@@ -22,7 +22,7 @@ services:
       POSTGRES_PASSWORD: keenetic
     volumes:
       - timescaledb-data:/var/lib/postgresql/data
-      - ./app/db/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+      - ./app/db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keenetic -d keenetic_monitor"]
       interval: 10s
