@@ -20,20 +20,28 @@ class PollScheduler:
     def __init__(self) -> None:
         self.settings = get_settings()
         self._stop = asyncio.Event()
+        self._realtime_clients: dict[str, tuple[str, KeeneticClient]] = {}
 
     async def run(self) -> None:
-        tasks = [
-            asyncio.create_task(self._loop("wan", self.settings.router_poll_wan_seconds, self.poll_wan)),
-            asyncio.create_task(self._loop("clients", self.settings.router_poll_clients_seconds, self.poll_clients)),
-            asyncio.create_task(self._loop("traffic", self.settings.router_poll_traffic_seconds, self.poll_traffic)),
-            asyncio.create_task(self._loop("system", self.settings.router_poll_system_seconds, self.poll_system)),
-        ]
+        interval = max(
+            min(
+                self.settings.router_poll_wan_seconds,
+                self.settings.router_poll_clients_seconds,
+                self.settings.router_poll_traffic_seconds,
+                self.settings.router_poll_system_seconds,
+            ),
+            1,
+        )
+        tasks = [asyncio.create_task(self._loop("realtime", interval, self.poll_all))]
         await self._stop.wait()
         for task in tasks:
             task.cancel()
 
     def stop(self) -> None:
         self._stop.set()
+        for _signature, client in self._realtime_clients.values():
+            client.close()
+        self._realtime_clients.clear()
 
     async def _loop(self, name: str, interval: int, func) -> None:
         while not self._stop.is_set():
@@ -74,6 +82,38 @@ class PollScheduler:
                     self._mark_failure(db, router)
                     db.commit()
 
+    def poll_all(self) -> None:
+        with SessionLocal() as db:
+            for router in self._enabled_routers(db):
+                password = decrypt_secret(router.password_encrypted)
+                if not password:
+                    logger.warning("Skipping router without password", extra={"router_id": router.id})
+                    continue
+                try:
+                    client = self._realtime_client(router, password)
+                    system = client.get_system_info()
+                    interfaces = client.get_interfaces()
+                    leases = client.get_dhcp_leases()
+                    wifi = client.get_wifi_clients()
+                    connected = client.get_connected_clients()
+
+                    metric = parse_router_metric(router.id, system=system, interfaces=interfaces)
+                    self._write_metric(db, metric)
+                    self._write_clients(
+                        db,
+                        router.id,
+                        parse_clients(router.id, leases=leases, wifi_clients=wifi, connected_clients=connected),
+                    )
+                    self._mark_success(db, router.id)
+                    if isinstance(system, dict):
+                        router.model = system.get("model") or router.model
+                        router.firmware_version = system.get("release") or system.get("version") or router.firmware_version
+                    db.commit()
+                except Exception:
+                    logger.exception("Realtime poll failed", extra={"router_id": router.id, "host": router.host})
+                    self._mark_failure(db, router)
+                    db.commit()
+
     def _poll_metrics(self, *, include_system: bool, include_interfaces: bool) -> None:
         with SessionLocal() as db:
             for router in self._enabled_routers(db):
@@ -108,8 +148,20 @@ class PollScheduler:
             router.username,
             password,
             raw_response_dir=self.settings.raw_response_dir,
+            save_raw_responses=self.settings.save_raw_responses,
             router_id=router.id,
         )
+
+    def _realtime_client(self, router: Router, password: str) -> KeeneticClient:
+        signature = f"{router.host}:{router.port}:{router.username}:{password}"
+        cached = self._realtime_clients.get(router.id)
+        if cached and cached[0] == signature:
+            return cached[1]
+        if cached:
+            cached[1].close()
+        client = self._client(router, password)
+        self._realtime_clients[router.id] = (signature, client)
+        return client
 
     @staticmethod
     def _enabled_routers(db: Session) -> list[Router]:
@@ -163,6 +215,11 @@ class PollScheduler:
         db.execute(stmt)
 
     @staticmethod
+    def _write_clients(db: Session, router_id: str, rows) -> None:
+        db.execute(delete(CurrentClient).where(CurrentClient.router_id == router_id))
+        db.add_all(CurrentClient(**row) for row in rows)
+
+    @staticmethod
     def _mark_success(db: Session, router_id: str) -> None:
         router = db.get(Router, router_id)
         if router is not None:
@@ -173,6 +230,13 @@ class PollScheduler:
         if router.failure_count < self.settings.router_offline_after_failures:
             return
         now = datetime.now(timezone.utc)
+        status = db.get(RouterStatus, router.id)
+        if status and status.last_seen:
+            last_seen = status.last_seen
+            if last_seen.tzinfo is None:
+                last_seen = last_seen.replace(tzinfo=timezone.utc)
+            if (now - last_seen).total_seconds() < self.settings.router_offline_grace_seconds:
+                return
         stmt = insert(RouterStatus).values(
             router_id=router.id,
             online=False,

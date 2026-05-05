@@ -79,9 +79,10 @@ docker compose up --build
 
 Services:
 
+- Dashboard: `http://localhost:8000`
 - API: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
-- Grafana: `http://localhost:3000` with `admin` / `admin`
+- Grafana: `http://localhost:3001` with `admin` / `admin`
 
 ## Router API
 
@@ -118,13 +119,12 @@ curl http://localhost:8000/routers/{router_id}/clients
 
 ## Polling
 
-- WAN/status: every 60 seconds
-- Clients: every 5 minutes
-- Traffic: every 5 minutes
-- System info: every 15 minutes
-- Router is marked offline after 3 failed polls
+- Dashboard refreshes every 2 seconds.
+- Collector uses one persistent session per router to avoid repeated Keenetic auth load.
+- The default collector interval is 2 seconds for real-time status and client updates.
+- Router is marked offline after repeated failed polls and a 30 second grace period.
 
-Raw RCI responses are saved to `raw-responses/` when collector calls succeed.
+Raw RCI responses can be saved to `raw-responses/` by setting `SAVE_RAW_RESPONSES=true`.
 
 ## MVP status
 
@@ -134,7 +134,8 @@ Implemented:
 - Encrypted stored router passwords
 - RCI client with Digest auth, timeouts, retries and raw response capture
 - Parser normalization for router metrics and clients
-- Poll scheduler
+- Real-time poll scheduler with persistent router sessions
+- Web dashboard for router status and client visibility
 - TimescaleDB/PostgreSQL schema
 - Grafana datasource and starter dashboard
 - Offline status marking after repeated failures

@@ -32,6 +32,7 @@ class KeeneticClient:
         use_https: bool = False,
         timeout: float = 10.0,
         raw_response_dir: Path | None = None,
+        save_raw_responses: bool = False,
         router_id: str | None = None,
     ) -> None:
         scheme = "https" if use_https else "http"
@@ -40,6 +41,7 @@ class KeeneticClient:
         self._password = password
         self.timeout = timeout
         self.raw_response_dir = raw_response_dir
+        self.save_raw_responses = save_raw_responses
         self.router_id = router_id or host
         self._client = httpx.Client(
             timeout=httpx.Timeout(timeout),
@@ -145,7 +147,7 @@ class KeeneticClient:
         return self.rci("show log")
 
     def _save_raw_response(self, command_payload: str | dict[str, Any], data: Any) -> None:
-        if self.raw_response_dir is None:
+        if not self.save_raw_responses or self.raw_response_dir is None:
             return
         self.raw_response_dir.mkdir(parents=True, exist_ok=True)
         command_name = command_payload if isinstance(command_payload, str) else "post-rci"

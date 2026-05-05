@@ -19,8 +19,10 @@ class Settings(BaseSettings):
     router_poll_traffic_seconds: int = 300
     router_poll_system_seconds: int = 900
     router_offline_after_failures: int = 3
+    router_offline_grace_seconds: int = 30
 
     raw_response_dir: Path = Path("/app/raw-responses")
+    save_raw_responses: bool = False
 
 
 @lru_cache
