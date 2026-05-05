@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="az">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Keenetic Monitor</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Keenetic Monitor</h1>
+        <p id="subtitle">Router və clientlər yüklənir</p>
+      </div>
+      <div class="actions">
+        <select id="routerSelect" aria-label="Router seç"></select>
+        <button id="refreshBtn" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="metrics" aria-label="Router status">
+        <article class="metric">
+          <span>Status</span>
+          <strong id="statusValue">-</strong>
+        </article>
+        <article class="metric">
+          <span>Client</span>
+          <strong id="clientCount">-</strong>
+        </article>
+        <article class="metric">
+          <span>CPU</span>
+          <strong id="cpuValue">-</strong>
+        </article>
+        <article class="metric">
+          <span>RAM</span>
+          <strong id="ramValue">-</strong>
+        </article>
+        <article class="metric">
+          <span>Uptime</span>
+          <strong id="uptimeValue">-</strong>
+        </article>
+      </section>
+
+      <section class="toolbar" aria-label="Client filterləri">
+        <div class="search">
+          <input id="searchInput" type="search" placeholder="Client, IP və ya MAC axtar" />
+        </div>
+        <div class="segments" role="group" aria-label="Connection type">
+          <button class="segment active" type="button" data-filter="all">Hamısı</button>
+          <button class="segment" type="button" data-filter="wifi">Wi-Fi</button>
+          <button class="segment" type="button" data-filter="unknown">Digər</button>
+        </div>
+      </section>
+
+      <section class="tableWrap" aria-label="Client siyahısı">
+        <table>
+          <thead>
+            <tr>
+              <th>Client</th>
+              <th>IP</th>
+              <th>MAC</th>
+              <th>Bağlantı</th>
+              <th>Signal</th>
+              <th>Download</th>
+              <th>Upload</th>
+              <th>Son görülmə</th>
+            </tr>
+          </thead>
+          <tbody id="clientsBody">
+            <tr>
+              <td colspan="8" class="empty">Yüklənir</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <script src="/static/script.js"></script>
+  </body>
+</html>
