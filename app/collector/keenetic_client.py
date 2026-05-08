@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 from hashlib import md5, sha256
@@ -118,11 +120,23 @@ class KeeneticClient:
     def get_system_info(self) -> Any:
         return self.rci("show system")
 
+    def get_version_info(self) -> Any:
+        return self.rci("show version")
+
+    def list_components(self, channel: str = "stable") -> Any:
+        return self.post_resource("components list", {"channel": channel})
+
+    def commit_components(self) -> Any:
+        return self.post_resource("components commit", {})
+
     def get_interfaces(self) -> Any:
         return self.rci("show interface")
 
     def get_dhcp_leases(self) -> Any:
         return self.rci("show ip dhcp bindings")
+
+    def get_arp_table(self) -> Any:
+        return self.rci("show ip arp")
 
     def get_connected_clients(self) -> Any:
         try:
@@ -138,6 +152,9 @@ class KeeneticClient:
     def get_traffic_counters(self) -> Any:
         return self.rci("show interface")
 
+    def get_interface_stat(self, interface_name: str) -> Any:
+        return self.rci(f"show interface stat?name={interface_name}")
+
     def get_uptime(self) -> int | None:
         data = self.get_system_info()
         uptime = data.get("uptime") if isinstance(data, dict) else None
@@ -145,6 +162,48 @@ class KeeneticClient:
 
     def get_event_log(self) -> Any:
         return self.rci("show log")
+
+    def get_running_config(self) -> Any:
+        return self.rci("show running-config")
+
+    def set_hotspot_host_access(self, mac: str, access: str) -> Any:
+        return self.post_resource("ip hotspot host", {"mac": mac, "access": access})
+
+    def set_wifi_password(self, access_point: str, password: str) -> Any:
+        return self.post_resource("interface authentication wpa-psk", {"name": access_point, "psk": password})
+
+    def set_wifi_ssid(self, access_point: str, ssid: str) -> Any:
+        return self.post_resource("interface ssid", {"name": access_point, "ssid": ssid})
+
+    def set_interface_enabled(self, interface_id: str, enabled: bool) -> Any:
+        command = f"no interface {interface_id} down" if enabled else f"interface {interface_id} down"
+        return self.post_resource(command, {})
+
+    def reboot(self) -> Any:
+        return self.post_resource("system reboot", {})
+
+    def save_configuration(self) -> Any:
+        return self.post_resource("system configuration save", {})
+
+    def post_resource(self, command_payload: str, body: dict[str, Any]) -> Any:
+        path = "/".join(part.strip("/") for part in command_payload.split() if part)
+        response = self._client.post(f"{self.base_url}/{path}", json=body)
+        if response.status_code == 401:
+            www_auth = response.headers.get("WWW-Authenticate", "")
+            if "x-ndw2-interactive" in www_auth:
+                self.login()
+                response = self._client.post(f"{self.base_url}/{path}", json=body)
+            else:
+                response = self._digest_client.post(f"{self.base_url}/{path}", json=body)
+        if response.status_code == 401:
+            raise KeeneticClientError("Keenetic RCI authentication failed")
+        response.raise_for_status()
+        if not response.content:
+            return {}
+        try:
+            return response.json()
+        except ValueError:
+            return {"status": "ok", "body": response.text}
 
     def _save_raw_response(self, command_payload: str | dict[str, Any], data: Any) -> None:
         if not self.save_raw_responses or self.raw_response_dir is None:

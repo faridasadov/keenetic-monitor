@@ -9,68 +9,358 @@
   <body>
     <header class="topbar">
       <div>
-        <h1>Keenetic Monitor</h1>
-        <p id="subtitle">Router və clientlər yüklənir</p>
+        <div class="brandLine">
+          <h1>Keenetic Monitor</h1>
+          <span id="routerTitleMeta" class="routerTitleMeta">-</span>
+        </div>
+        <p id="subtitle" data-i18n="loadingRouters">Router və clientlər yüklənir</p>
       </div>
       <div class="actions">
+        <select id="languageSelect" aria-label="Dil seç">
+          <option value="az">AZ</option>
+          <option value="ru">RU</option>
+          <option value="en">EN</option>
+        </select>
         <select id="routerSelect" aria-label="Router seç"></select>
-        <button id="refreshBtn" type="button">Refresh</button>
+        <button id="addSchoolBtn" class="allowBtn adminOnly" type="button" data-i18n="addSchool">Məktəb əlavə et</button>
+        <button id="pingBtn" type="button">Ping</button>
+        <button id="siteCheckBtn" type="button">Sayt yoxla</button>
+        <button id="speedtestBtn" type="button">Speedtest</button>
+        <button id="adminPanelBtn" class="adminOnly userBadge" type="button">Admin panel</button>
+        <span id="userBadge" class="userBadge userOnly">-</span>
+        <button id="logoutBtn" type="button">Çıxış</button>
+        <button id="refreshBtn" type="button" data-i18n="refresh">Refresh</button>
       </div>
     </header>
 
+    <div id="loginModal" class="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
+      <form id="loginForm" class="modalPanel loginPanel">
+        <div class="modalHeader">
+          <div>
+            <h2 id="loginModalTitle">Giriş</h2>
+            <p>Admin və ya istifadəçi hesabı ilə daxil ol.</p>
+          </div>
+        </div>
+        <div class="modalGrid">
+          <label>
+            <span>Login</span>
+            <input id="loginUsernameInput" type="text" autocomplete="username" required />
+          </label>
+          <label>
+            <span>Parol</span>
+            <input id="loginPasswordInput" type="password" autocomplete="current-password" required />
+          </label>
+        </div>
+        <p id="loginMessage" class="message"></p>
+        <div class="modalActions">
+          <button class="allowBtn" type="submit">Daxil ol</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="adminPanelModal" class="modalOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="adminPanelTitle">
+      <div class="modalPanel adminPanel">
+        <div class="modalHeader">
+          <div>
+            <h2 id="adminPanelTitle">Admin panel</h2>
+            <p>İstifadəçilər, router məlumatları və KeeneticOS yenilənməsi.</p>
+          </div>
+          <button id="adminPanelClose" class="iconBtn" type="button" aria-label="Bağla">×</button>
+        </div>
+
+        <div class="adminGrid">
+          <section class="adminSection">
+            <div class="adminSectionHead">
+              <h3>İstifadəçilər</h3>
+              <span id="adminUserCount" class="muted">-</span>
+            </div>
+            <div id="adminUsersList" class="adminUsersList">
+              <span class="muted">Yüklənir</span>
+            </div>
+            <form id="userForm" class="adminForm">
+              <input id="newUserNameInput" type="text" minlength="3" maxlength="80" placeholder="Login" required />
+              <input id="newUserPasswordInput" type="password" minlength="4" maxlength="120" placeholder="Parol" required />
+              <select id="newUserRoleSelect">
+                <option value="user">İstifadəçi</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button class="allowBtn" type="submit">Əlavə et</button>
+            </form>
+            <p id="userModalMessage" class="message"></p>
+          </section>
+
+          <section class="adminSection">
+            <div class="adminSectionHead">
+              <h3>Router və OS</h3>
+              <span id="adminRouterName" class="muted">-</span>
+            </div>
+            <div class="adminKv">
+              <span>Model</span><strong id="adminRouterModel">-</strong>
+              <span>Versiya</span><strong id="adminRouterVersion">-</strong>
+              <span>IP</span><strong id="adminRouterHost">-</strong>
+            </div>
+            <div class="adminActions">
+              <button id="refreshIdentityBtn" type="button">Məlumatı yenilə</button>
+              <select id="osChannelSelect" aria-label="OS kanalı">
+                <option value="stable">Stable</option>
+                <option value="preview">Preview</option>
+                <option value="draft">Dev</option>
+              </select>
+              <button id="osCheckBtn" type="button">OS yoxla</button>
+              <button id="osUpdateBtn" class="dangerBtn" type="button">OS yenilə</button>
+            </div>
+            <pre id="osUpdateStatus" class="adminLog">Hazırdır</pre>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div id="schoolModal" class="modalOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="schoolModalTitle">
+      <form id="schoolForm" class="modalPanel">
+        <div class="modalHeader">
+          <div>
+            <h2 id="schoolModalTitle" data-i18n="addSchool">Məktəb əlavə et</h2>
+            <p data-i18n="addSchoolHint">Router məlumatlarını yaz, əvvəl test et, sonra təsdiqlə.</p>
+          </div>
+          <button id="schoolModalClose" class="iconBtn" type="button" aria-label="Bağla">×</button>
+        </div>
+        <div class="modalGrid">
+          <label>
+            <span>IP</span>
+            <input id="schoolIpInput" name="host" type="text" inputmode="numeric" placeholder="10.8.92.3" required />
+          </label>
+          <label>
+            <span>Login</span>
+            <input id="schoolLoginInput" name="username" type="text" autocomplete="username" placeholder="admin" required />
+          </label>
+          <label>
+            <span data-i18n="password">Parol</span>
+            <input id="schoolPasswordInput" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <label>
+            <span data-i18n="description">Müəssisə adı</span>
+            <input id="schoolDescriptionInput" name="name" type="text" placeholder="79 nomreli mekteb" required />
+          </label>
+        </div>
+        <p id="schoolModalMessage" class="message"></p>
+        <div class="modalActions">
+          <button id="testSchoolBtn" type="button" data-i18n="test">Test et</button>
+          <button id="confirmSchoolBtn" class="allowBtn" type="submit" disabled data-i18n="confirm">Təsdiq et</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="pingModal" class="modalOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="pingModalTitle">
+      <form id="pingForm" class="modalPanel">
+        <div class="modalHeader">
+          <div>
+            <h2 id="pingModalTitle">Ping</h2>
+            <p>IP ünvanı və neçə dəfə ping atılacağını yaz.</p>
+          </div>
+          <button id="pingModalClose" class="iconBtn" type="button" aria-label="Bağla">×</button>
+        </div>
+        <div class="modalGrid">
+          <label>
+            <span>IP</span>
+            <input id="pingHostInput" type="text" placeholder="8.8.8.8" required />
+          </label>
+          <label>
+            <span>Say</span>
+            <input id="pingCountInput" type="number" min="1" max="20" value="4" required />
+          </label>
+        </div>
+        <div class="modalActions">
+          <button id="pingExportBtn" type="button" disabled>Nəticəni çıxart</button>
+          <button type="submit">Ping</button>
+        </div>
+        <p id="pingWarning" class="message warningMessage"></p>
+        <pre id="pingResult" class="pingResult"></pre>
+      </form>
+    </div>
+
+    <div id="siteCheckModal" class="modalOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="siteCheckModalTitle">
+      <form id="siteCheckForm" class="modalPanel">
+        <div class="modalHeader">
+          <div>
+            <h2 id="siteCheckModalTitle">Sayt yoxla</h2>
+            <p>Saytın əlçatanlığını və cavab müddətini yoxla.</p>
+          </div>
+          <button id="siteCheckModalClose" class="iconBtn" type="button" aria-label="Bağla">×</button>
+        </div>
+        <div class="modalGrid">
+          <label>
+            <span>Sayt</span>
+            <input id="siteUrlInput" type="text" placeholder="google.com" required />
+          </label>
+        </div>
+        <div class="modalActions">
+          <button id="siteExportBtn" type="button" disabled>Nəticəni çıxart</button>
+          <button type="submit">Yoxla</button>
+        </div>
+        <p id="siteWarning" class="message warningMessage"></p>
+        <pre id="siteResult" class="pingResult"></pre>
+      </form>
+    </div>
+
+    <div id="speedtestModal" class="modalOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="speedtestModalTitle">
+      <form id="speedtestForm" class="modalPanel">
+        <div class="modalHeader">
+          <div>
+            <h2 id="speedtestModalTitle">Speedtest</h2>
+            <p>Serverdən internet download sürətini yoxla.</p>
+          </div>
+          <button id="speedtestModalClose" class="iconBtn" type="button" aria-label="Bağla">×</button>
+        </div>
+        <div class="modalActions">
+          <button id="speedtestExportBtn" type="button" disabled>Nəticəni çıxart</button>
+          <button type="submit">Yoxla</button>
+        </div>
+        <p id="speedtestWarning" class="message warningMessage"></p>
+        <pre id="speedtestResult" class="pingResult"></pre>
+      </form>
+    </div>
+
     <main>
-      <section class="metrics" aria-label="Router status">
-        <article class="metric">
-          <span>Status</span>
-          <strong id="statusValue">-</strong>
-        </article>
-        <article class="metric">
-          <span>Client</span>
-          <strong id="clientCount">-</strong>
-        </article>
-        <article class="metric">
-          <span>CPU</span>
-          <strong id="cpuValue">-</strong>
-        </article>
-        <article class="metric">
-          <span>RAM</span>
-          <strong id="ramValue">-</strong>
-        </article>
-        <article class="metric">
-          <span>Uptime</span>
-          <strong id="uptimeValue">-</strong>
-        </article>
+      <section class="viewBar" aria-label="Görünüş">
+        <div class="viewGroup">
+          <strong>Görünüş</strong>
+          <select id="viewScaleSelect" aria-label="Ümumi ölçü">
+            <option value="normal">Normal</option>
+            <option value="compact">Kiçik</option>
+            <option value="comfortable">Böyük</option>
+          </select>
+        </div>
+        <div class="sectionToggles" aria-label="Bölmələr">
+          <label><input class="sectionToggle" type="checkbox" data-target-panel="status" checked /> Status</label>
+          <label><input class="sectionToggle" type="checkbox" data-target-panel="traffic" checked /> Trafik</label>
+          <label><input class="sectionToggle" type="checkbox" data-target-panel="wifi" checked /> Wi-Fi</label>
+          <label><input class="sectionToggle" type="checkbox" data-target-panel="ports" checked /> Portlar</label>
+          <label><input class="sectionToggle" type="checkbox" data-target-panel="blocked" checked /> Blok</label>
+          <label><input class="sectionToggle" type="checkbox" data-target-panel="clients" checked /> Clientlər</label>
+        </div>
+      </section>
+      <div id="alertBar" class="alertBar hidden"></div>
+
+      <section class="overviewGrid" aria-label="Router status" data-i18n-aria="routerStatus">
+        <section class="panel statusPanel" data-panel="status">
+          <div class="panelHeader">
+            <h2 data-i18n="routerStatus">Router status</h2>
+          </div>
+          <div class="metrics statusMetrics">
+            <article class="metric">
+              <span data-i18n="status">Status</span>
+              <strong id="statusValue">-</strong>
+            </article>
+            <article class="metric">
+              <span data-i18n="clients">Client</span>
+              <strong id="clientCount">-</strong>
+            </article>
+            <article class="metric">
+              <span>CPU</span>
+              <strong id="cpuValue">-</strong>
+            </article>
+            <article class="metric">
+              <span>RAM</span>
+              <strong id="ramValue">-</strong>
+            </article>
+            <article class="metric">
+              <span data-i18n="uptime">Uptime</span>
+              <strong id="uptimeValue">-</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel trafficPanel" data-panel="traffic">
+          <div class="panelHeader">
+            <h2 data-i18n="traffic">Trafik</h2>
+          </div>
+          <div class="trafficGrid">
+            <article class="trafficCard">
+              <span data-i18n="lanTraffic">LAN trafik</span>
+              <strong id="lanTrafficValue">-</strong>
+            </article>
+            <article class="trafficCard">
+              <span data-i18n="wifiTraffic">Wi-Fi trafik</span>
+              <strong id="wifiTrafficValue">-</strong>
+            </article>
+          </div>
+        </section>
       </section>
 
-      <section class="toolbar" aria-label="Client filterləri">
+      <section class="controlsGrid" aria-label="Router idarəsi" data-i18n-aria="routerControls">
+        <form id="wifiForm" class="panel controlPanel" data-panel="wifi">
+          <div class="panelHeader">
+            <h2>Wi-Fi</h2>
+          </div>
+          <div id="wifiInfoList" class="wifiInfoList">
+            <span class="muted" data-i18n="loading">Yüklənir</span>
+          </div>
+          <div class="formRow">
+            <input id="wifiSsidInput" type="text" minlength="1" maxlength="32" placeholder="Yeni Wi-Fi adı" data-i18n-placeholder="newWifiName" />
+            <button id="wifiSsidBtn" class="adminOnly" type="button" data-i18n="changeName">Adı dəyiş</button>
+          </div>
+          <div class="formRow">
+            <input id="wifiPasswordInput" type="password" minlength="8" maxlength="63" placeholder="Yeni Wi-Fi şifrəsi" data-i18n-placeholder="newWifiPassword" />
+            <button class="adminOnly" type="submit" data-i18n="change">Dəyiş</button>
+          </div>
+          <div class="buttonRow adminOnly">
+            <button id="wifiOffBtn" class="dangerBtn" type="button" data-i18n="wifiOff">Wi-Fi söndür</button>
+            <button id="wifiOnBtn" class="allowBtn" type="button" data-i18n="wifiOn">Wi-Fi aç</button>
+          </div>
+          <p id="actionMessage" class="message"></p>
+        </form>
+
+        <section class="panel controlPanel" data-panel="ports">
+          <div class="panelHeader">
+            <h2 data-i18n="ports">Portlar</h2>
+            <button id="restartBtn" class="dangerBtn adminOnly" type="button" data-i18n="restartRouter">Router restart</button>
+          </div>
+          <div id="portsList" class="portsList">
+            <span class="muted" data-i18n="loading">Yüklənir</span>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel blockedPanel" data-panel="blocked">
+        <div class="panelHeader">
+          <h2 data-i18n="blockedDevices">Bloklanmış avadanlıqlar</h2>
+        </div>
+        <div id="blockedList" class="blockedList">
+          <span class="muted" data-i18n="loading">Yüklənir</span>
+        </div>
+      </section>
+
+      <section class="toolbar" aria-label="Client filterləri" data-i18n-aria="clientFilters">
         <div class="search">
-          <input id="searchInput" type="search" placeholder="Client, IP və ya MAC axtar" />
+          <input id="searchInput" type="search" placeholder="Client, IP və ya MAC axtar" data-i18n-placeholder="searchPlaceholder" />
         </div>
-        <div class="segments" role="group" aria-label="Connection type">
-          <button class="segment active" type="button" data-filter="all">Hamısı</button>
+        <div class="segments" role="group" aria-label="Connection type" data-i18n-aria="connectionType">
+          <button class="segment active" type="button" data-filter="all" data-i18n="all">Hamısı</button>
+          <button class="segment" type="button" data-filter="lan">LAN</button>
           <button class="segment" type="button" data-filter="wifi">Wi-Fi</button>
-          <button class="segment" type="button" data-filter="unknown">Digər</button>
+          <button class="segment" type="button" data-filter="unknown" data-i18n="other">Digər</button>
         </div>
       </section>
 
-      <section class="tableWrap" aria-label="Client siyahısı">
+      <section class="tableWrap" aria-label="Client siyahısı" data-i18n-aria="clientList" data-panel="clients">
         <table>
           <thead>
             <tr>
               <th>Client</th>
               <th>IP</th>
               <th>MAC</th>
-              <th>Bağlantı</th>
+              <th data-i18n="connection">Bağlantı</th>
               <th>Signal</th>
               <th>Download</th>
               <th>Upload</th>
               <th>Trend</th>
-              <th>Son görülmə</th>
+              <th data-i18n="lastSeen">Son görülmə</th>
+              <th data-i18n="action">Əməl</th>
             </tr>
           </thead>
           <tbody id="clientsBody">
             <tr>
-              <td colspan="9" class="empty">Yüklənir</td>
+              <td colspan="10" class="empty" data-i18n="loading">Yüklənir</td>
             </tr>
           </tbody>
         </table>

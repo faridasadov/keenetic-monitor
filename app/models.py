@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
@@ -24,6 +26,23 @@ class AccessMethod(str, Enum):
     vpn = "vpn"
     keendns = "keendns"
     http_proxy = "http_proxy"
+
+
+class UserRole(str, Enum):
+    admin = "admin"
+    user = "user"
+
+
+class AppUser(Base):
+    __tablename__ = "app_users"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    username: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), default=UserRole.user.value)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class Router(Base):
@@ -59,6 +78,17 @@ class CurrentClient(Base):
     tx_bytes: Mapped[int | None] = mapped_column(BigInteger)
     signal: Mapped[float | None] = mapped_column(Float)
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class BlockedClient(Base):
+    __tablename__ = "blocked_clients"
+
+    router_id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True)
+    mac: Mapped[str] = mapped_column(String(32), primary_key=True)
+    hostname: Mapped[str | None] = mapped_column(String(255))
+    ip: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class RouterStatus(Base):
@@ -118,6 +148,48 @@ class RouterCreate(BaseModel):
     enabled: bool = True
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AuthTokenRead(BaseModel):
+    token: str
+    username: str
+    role: UserRole
+
+
+class AppUserCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=80)
+    password: str = Field(min_length=4, max_length=120)
+    role: UserRole = UserRole.user
+    enabled: bool = True
+
+
+class AppUserUpdate(BaseModel):
+    password: str | None = Field(default=None, min_length=4, max_length=120)
+    role: UserRole | None = None
+    enabled: bool | None = None
+
+
+class AppUserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    username: str
+    role: str
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class RouterCredentialTest(BaseModel):
+    host: str
+    port: int = 80
+    username: str
+    password: str
+
+
 class RouterUpdate(BaseModel):
     name: str | None = None
     site: str | None = None
@@ -173,6 +245,90 @@ class ClientMetricRead(BaseModel):
     rx_bytes: int | None
     tx_bytes: int | None
     signal: float | None
+
+
+class BlockedClientRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    router_id: str
+    mac: str
+    hostname: str | None
+    ip: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PortRead(BaseModel):
+    id: str
+    label: str
+    kind: str
+    category: str = "access"
+    is_wan: bool = False
+    link: str | None = None
+    state: str | None = None
+    connected: bool
+    speed_mbps: int | None = None
+    duplex: str | None = None
+    role: str | None = None
+    ssid: str | None = None
+
+
+class SummaryRead(BaseModel):
+    router_id: str
+    client_count: int
+    online: bool
+    wan_status: str | None
+    wan_ip: str | None
+    wan_provider: str | None
+    wan_rx_bps: float | None
+    wan_tx_bps: float | None
+    total_rx_bps: float | None = None
+    total_tx_bps: float | None = None
+    lan_rx_bps: float | None = None
+    lan_tx_bps: float | None = None
+    wifi_rx_bps: float | None = None
+    wifi_tx_bps: float | None = None
+
+
+class ClientAccessUpdate(BaseModel):
+    mac: str
+    blocked: bool
+
+
+class WifiPasswordUpdate(BaseModel):
+    password: str = Field(min_length=8, max_length=63)
+    access_points: list[str] | None = None
+    save: bool = True
+
+
+class WifiSsidUpdate(BaseModel):
+    ssid: str = Field(min_length=1, max_length=32)
+    access_points: list[str] | None = None
+    save: bool = True
+
+
+class PingRequest(BaseModel):
+    host: str
+    count: int = Field(default=4, ge=1, le=20)
+
+
+class SiteCheckRequest(BaseModel):
+    url: str
+
+
+class RouterOsUpdateRequest(BaseModel):
+    channel: str = Field(default="stable", pattern="^(stable|preview|draft)$")
+
+
+class InterfacePowerUpdate(BaseModel):
+    enabled: bool
+    save: bool = True
+
+
+class WifiPowerUpdate(BaseModel):
+    enabled: bool
+    access_points: list[str] | None = None
+    save: bool = True
 
 
 class StatusRead(BaseModel):

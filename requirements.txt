@@ -8,3 +8,4 @@ pydantic-settings==2.7.0
 cryptography==44.0.0
 tenacity==9.0.0
 python-dotenv==1.0.1
+speedtest-cli==2.1.3

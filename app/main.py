@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -10,6 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import router as api_router
 from app.collector.scheduler import PollScheduler
 from app.config import get_settings
+from app.db.postgres import engine
+from app.models import Base
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -17,6 +21,7 @@ logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    await asyncio.to_thread(Base.metadata.create_all, bind=engine)
     scheduler = PollScheduler()
     task: asyncio.Task | None = None
     if settings.collector_enabled:

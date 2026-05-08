@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -8,7 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.collector.keenetic_client import KeeneticClient
-from app.collector.parser import parse_clients, parse_router_metric
+from app.collector.parser import parse_clients, parse_router_metric, traffic_stat_targets
 from app.config import get_settings
 from app.db.postgres import SessionLocal
 from app.models import ClientMetric, CurrentClient, Router, RouterMetric, RouterStatus, decrypt_secret
@@ -70,9 +72,10 @@ class PollScheduler:
                 try:
                     with self._client(router, password) as client:
                         leases = client.get_dhcp_leases()
+                        arp = client.get_arp_table()
                         wifi = client.get_wifi_clients()
                         connected = client.get_connected_clients()
-                    rows = parse_clients(router.id, leases=leases, wifi_clients=wifi, connected_clients=connected)
+                    rows = parse_clients(router.id, leases=leases, wifi_clients=wifi, connected_clients=connected, arp_table=arp)
                     db.execute(delete(CurrentClient).where(CurrentClient.router_id == router.id))
                     db.add_all(CurrentClient(**row) for row in rows)
                     self._mark_success(db, router.id)
@@ -92,20 +95,21 @@ class PollScheduler:
                 try:
                     client = self._realtime_client(router, password)
                     system = client.get_system_info()
+                    version = self._version_info(client)
                     interfaces = client.get_interfaces()
+                    interface_stats = self._interface_stats(client, interfaces)
                     leases = client.get_dhcp_leases()
+                    arp = client.get_arp_table()
                     wifi = client.get_wifi_clients()
                     connected = client.get_connected_clients()
 
-                    metric = parse_router_metric(router.id, system=system, interfaces=interfaces)
-                    clients = parse_clients(router.id, leases=leases, wifi_clients=wifi, connected_clients=connected)
+                    metric = parse_router_metric(router.id, system=system, interfaces=interfaces, interface_stats=interface_stats)
+                    clients = parse_clients(router.id, leases=leases, wifi_clients=wifi, connected_clients=connected, arp_table=arp)
                     self._write_metric(db, metric)
                     self._write_clients(db, router.id, clients)
                     self._write_client_metrics(db, clients, metric.timestamp)
                     self._mark_success(db, router.id)
-                    if isinstance(system, dict):
-                        router.model = system.get("model") or router.model
-                        router.firmware_version = system.get("release") or system.get("version") or router.firmware_version
+                    self._write_router_identity(router, system, version)
                     db.commit()
                 except Exception:
                     logger.exception("Realtime poll failed", extra={"router_id": router.id, "host": router.host})
@@ -121,18 +125,20 @@ class PollScheduler:
                     continue
                 try:
                     system = None
+                    version = None
                     interfaces = None
+                    interface_stats = None
                     with self._client(router, password) as client:
                         if include_system:
                             system = client.get_system_info()
+                            version = self._version_info(client)
                         if include_interfaces:
                             interfaces = client.get_interfaces()
-                    metric = parse_router_metric(router.id, system=system, interfaces=interfaces)
+                        interface_stats = self._interface_stats(client, interfaces) if interfaces is not None else None
+                    metric = parse_router_metric(router.id, system=system, interfaces=interfaces, interface_stats=interface_stats)
                     self._write_metric(db, metric)
                     self._mark_success(db, router.id)
-                    if system:
-                        router.model = system.get("model") or router.model if isinstance(system, dict) else router.model
-                        router.firmware_version = system.get("release") or system.get("version") or router.firmware_version if isinstance(system, dict) else router.firmware_version
+                    self._write_router_identity(router, system, version)
                     db.commit()
                 except Exception:
                     logger.exception("Metric poll failed", extra={"router_id": router.id, "host": router.host})
@@ -160,6 +166,38 @@ class PollScheduler:
         client = self._client(router, password)
         self._realtime_clients[router.id] = (signature, client)
         return client
+
+    @staticmethod
+    def _interface_stats(client: KeeneticClient, interfaces) -> dict[str, object]:
+        stats: dict[str, object] = {}
+        for target in traffic_stat_targets(interfaces):
+            try:
+                stats[target] = client.get_interface_stat(target)
+            except Exception:
+                logger.debug("Interface stat poll failed", exc_info=True, extra={"interface": target})
+        return stats
+
+    @staticmethod
+    def _version_info(client: KeeneticClient) -> dict[str, object] | None:
+        try:
+            data = client.get_version_info()
+        except Exception:
+            logger.debug("Version poll failed", exc_info=True)
+            return None
+        return data if isinstance(data, dict) else None
+
+    @staticmethod
+    def _write_router_identity(router: Router, system, version) -> None:
+        system_data = system if isinstance(system, dict) else {}
+        version_data = version if isinstance(version, dict) else {}
+        router.model = version_data.get("model") or version_data.get("description") or system_data.get("model") or router.model
+        router.firmware_version = (
+            version_data.get("release")
+            or version_data.get("title")
+            or system_data.get("release")
+            or system_data.get("version")
+            or router.firmware_version
+        )
 
     @staticmethod
     def _enabled_routers(db: Session) -> list[Router]:
