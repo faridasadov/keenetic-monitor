@@ -8,7 +8,7 @@ import re
 import secrets
 import subprocess
 import time
-from datetime import timedelta
+from datetime import timedelta, timezone
 from urllib.parse import urlparse
 
 import httpx
@@ -480,6 +480,8 @@ def router_ports(router_id: str, db: Session = Depends(get_db)) -> list[dict[str
     raw = metric.raw if metric is not None else None
     if isinstance(raw, dict) and raw.get("interfaces"):
         return parse_ports(raw.get("interfaces"))
+    if not _router_recently_online(router_id, db):
+        return []
 
     item, password = _router_credentials(router_id, db)
     try:
@@ -492,6 +494,8 @@ def router_ports(router_id: str, db: Session = Depends(get_db)) -> list[dict[str
 
 @router.get("/routers/{router_id}/wifi")
 def router_wifi(router_id: str, db: Session = Depends(get_db)) -> list[dict[str, object]]:
+    if not _router_recently_online(router_id, db):
+        return []
     item, password = _router_credentials(router_id, db)
     try:
         with _keenetic_client(item, password) as client:
@@ -796,6 +800,16 @@ def _keenetic_client(item: Router, password: str, *, timeout: float = 10.0) -> K
         raw_response_dir=get_settings().raw_response_dir,
         router_id=item.id,
     )
+
+
+def _router_recently_online(router_id: str, db: Session, *, max_age_seconds: int = 60) -> bool:
+    status_row = db.get(RouterStatus, router_id)
+    if status_row is None or not status_row.online or status_row.last_seen is None:
+        return False
+    last_seen = status_row.last_seen
+    if last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    return (utcnow() - last_seen).total_seconds() <= max_age_seconds
 
 
 def _write_router_identity(router_item: Router, system, version) -> None:

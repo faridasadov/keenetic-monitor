@@ -111,8 +111,9 @@ class PollScheduler:
                     self._mark_success(db, router.id)
                     self._write_router_identity(router, system, version)
                     db.commit()
-                except Exception:
-                    logger.exception("Realtime poll failed", extra={"router_id": router.id, "host": router.host})
+                except Exception as exc:
+                    self._close_realtime_client(router.id)
+                    self._log_poll_failure("Realtime poll failed", router, exc)
                     self._mark_failure(db, router)
                     db.commit()
 
@@ -151,6 +152,7 @@ class PollScheduler:
             router.port,
             router.username,
             password,
+            timeout=3.0,
             raw_response_dir=self.settings.raw_response_dir,
             save_raw_responses=self.settings.save_raw_responses,
             router_id=router.id,
@@ -166,6 +168,18 @@ class PollScheduler:
         client = self._client(router, password)
         self._realtime_clients[router.id] = (signature, client)
         return client
+
+    def _close_realtime_client(self, router_id: str) -> None:
+        cached = self._realtime_clients.pop(router_id, None)
+        if cached:
+            cached[1].close()
+
+    @staticmethod
+    def _log_poll_failure(message: str, router: Router, exc: Exception) -> None:
+        if isinstance(exc, TimeoutError) or "timed out" in str(exc).lower():
+            logger.warning("%s: %s", message, exc, extra={"router_id": router.id, "host": router.host})
+            return
+        logger.exception(message, extra={"router_id": router.id, "host": router.host})
 
     @staticmethod
     def _interface_stats(client: KeeneticClient, interfaces) -> dict[str, object]:
