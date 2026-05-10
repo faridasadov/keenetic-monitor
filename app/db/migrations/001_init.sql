@@ -3,7 +3,12 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE TABLE IF NOT EXISTS routers (
     id UUID PRIMARY KEY,
     name VARCHAR(120) NOT NULL,
+    description TEXT,
     site VARCHAR(120),
+    address TEXT,
+    contact_name VARCHAR(120),
+    contact_phone VARCHAR(64),
+    support_status VARCHAR(32) NOT NULL DEFAULT 'normal',
     host VARCHAR(255) NOT NULL,
     port INTEGER NOT NULL DEFAULT 80,
     username VARCHAR(120) NOT NULL,
@@ -93,3 +98,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
     details JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS diagnostic_runs (
+    id UUID PRIMARY KEY,
+    router_id UUID NOT NULL REFERENCES routers(id) ON DELETE CASCADE,
+    status VARCHAR(32) NOT NULL DEFAULT 'unknown',
+    summary TEXT NOT NULL DEFAULT '',
+    result JSONB NOT NULL,
+    created_by VARCHAR(80),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_diagnostic_runs_router_time ON diagnostic_runs(router_id, created_at DESC);

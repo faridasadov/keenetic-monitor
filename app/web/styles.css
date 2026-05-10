@@ -13,7 +13,8 @@
   --warn: #b45309;
   --bad: #b42318;
   --bad-soft: #fee4e2;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow: 0 10px 30px rgba(16, 24, 40, 0.08);
+  --shadow-soft: 0 1px 3px rgba(16, 24, 40, 0.06);
 }
 
 * {
@@ -26,6 +27,22 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+@keyframes overlayFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes panelRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .topbar {
@@ -68,6 +85,13 @@ h2 {
   font-weight: 700;
 }
 
+.routerDescriptionText {
+  max-width: 760px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 p,
 .muted {
   color: var(--muted);
@@ -80,7 +104,8 @@ p {
 
 button,
 select,
-input {
+input,
+textarea {
   min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -100,11 +125,23 @@ button {
 
 button:hover {
   border-color: #9fb0c4;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
 }
 
-input {
+button:active {
+  transform: translateY(0);
+}
+
+input,
+textarea {
   width: 100%;
   padding: 0 12px;
+}
+
+textarea {
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 main {
@@ -119,7 +156,8 @@ main {
 .buttonRow,
 .viewBar,
 .viewGroup,
-.sectionToggles {
+.sectionToggles,
+.supportDeskGrid {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -135,6 +173,15 @@ body[data-role="admin"] .adminOnly {
 
 body[data-role="admin"] .buttonRow.adminOnly {
   display: flex !important;
+}
+
+body[data-role="first_support"] .buttonRow.adminOnly.supportAllowed {
+  display: flex !important;
+}
+
+body[data-role="first_support"] .adminOnly.supportAllowed,
+body[data-role="admin"] .adminOnly.supportAllowed {
+  display: inline-flex !important;
 }
 
 body[data-role="admin"] .userOnly {
@@ -157,8 +204,80 @@ body[data-role="admin"] .userOnly {
   width: min(460px, 100%);
 }
 
+.supportDeskGrid {
+  align-items: stretch;
+  margin-bottom: 14px;
+}
+
+.supportCard {
+  flex: 1 1 0;
+  min-width: 0;
+  border-top: 3px solid var(--accent);
+}
+
+.supportInfoGrid {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px 10px;
+}
+
+.supportInfoGrid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.supportInfoGrid strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.supportStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.supportStatusBadge.warning,
+.supportStatusBadge.open {
+  background: #fef3c7;
+  color: var(--warn);
+}
+
+.supportStatusBadge.critical {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.supportStatusBadge.ok,
+.supportStatusBadge.normal {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.supportLog {
+  min-height: 126px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #d1fae5;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
 .adminPanel {
-  width: min(760px, 100%);
+  width: min(1040px, 100%);
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   overflow-x: hidden;
@@ -172,7 +291,7 @@ body[data-role="admin"] .userOnly {
 
 .adminSection {
   min-width: 0;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-soft);
@@ -181,7 +300,8 @@ body[data-role="admin"] .userOnly {
 .adminSectionHead,
 .adminUserItem,
 .adminActions,
-.adminForm {
+.adminForm,
+.routerDescriptionForm {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -194,7 +314,7 @@ body[data-role="admin"] .userOnly {
 
 .adminSection h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .adminUsersList {
@@ -247,9 +367,65 @@ body[data-role="admin"] .userOnly {
 
 .adminForm input,
 .adminForm select,
-.adminForm button {
+.adminForm button,
+.adminFullLabel select,
+.routerDescriptionForm input,
+.routerDescriptionForm select,
+.routerDescriptionForm textarea,
+.routerDescriptionForm button,
+.adminToolsGrid input {
   min-height: 34px;
   font-size: 13px;
+}
+
+.routerDescriptionForm {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  margin-top: 10px;
+}
+
+.routerDescriptionForm button {
+  grid-column: 1 / -1;
+}
+
+.adminFullLabel,
+.routerDescriptionForm label,
+.adminToolsGrid label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.adminFullLabel {
+  margin-bottom: 10px;
+}
+
+.checkboxLine {
+  min-height: 34px;
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.checkboxLine input {
+  width: 16px;
+  height: 16px;
+}
+
+.routerDescriptionForm textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.adminToolsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .adminKv {
@@ -284,6 +460,11 @@ body[data-role="admin"] .userOnly {
   flex: 1 1 130px;
   min-height: 34px;
   font-size: 13px;
+}
+
+.adminActions button[id^="admin"] {
+  min-height: 40px;
+  font-weight: 800;
 }
 
 .adminLog {
@@ -378,7 +559,9 @@ body[data-role="admin"] .userOnly {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(15, 23, 42, 0.42);
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(5px);
+  animation: overlayFade 140ms ease-out;
 }
 
 .modalOverlay.hidden {
@@ -392,6 +575,7 @@ body[data-role="admin"] .userOnly {
   border-radius: 10px;
   background: var(--panel);
   box-shadow: 0 24px 60px rgba(16, 24, 40, 0.22);
+  animation: panelRise 180ms ease-out;
 }
 
 .modalHeader {
@@ -948,8 +1132,13 @@ tbody tr:last-child td {
   .topbar,
   .toolbar,
   .actions,
-  .viewBar {
+  .viewBar,
+  .supportDeskGrid {
     align-items: stretch;
+  }
+
+  .supportDeskGrid {
+    flex-direction: column;
   }
 
   .actions,
@@ -969,7 +1158,8 @@ tbody tr:last-child td {
   .modalGrid,
   .wifiInfoItem,
   .adminGrid,
-  .adminForm {
+  .adminForm,
+  .routerDescriptionForm {
     grid-template-columns: 1fr;
   }
 

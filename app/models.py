@@ -30,6 +30,8 @@ class AccessMethod(str, Enum):
 
 class UserRole(str, Enum):
     admin = "admin"
+    first_support = "first_support"
+    call_center = "call_center"
     user = "user"
 
 
@@ -50,7 +52,12 @@ class Router(Base):
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
     site: Mapped[str | None] = mapped_column(String(120))
+    address: Mapped[str | None] = mapped_column(Text)
+    contact_name: Mapped[str | None] = mapped_column(String(120))
+    contact_phone: Mapped[str | None] = mapped_column(String(64))
+    support_status: Mapped[str] = mapped_column(String(32), default="normal")
     host: Mapped[str] = mapped_column(String(255), nullable=False)
     port: Mapped[int] = mapped_column(Integer, default=80)
     username: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -137,9 +144,26 @@ class ClientMetric(Base):
     signal: Mapped[float | None] = mapped_column(Float)
 
 
+class DiagnosticRun(Base):
+    __tablename__ = "diagnostic_runs"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    router_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="unknown")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_by: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class RouterCreate(BaseModel):
     name: str
+    description: str | None = None
     site: str | None = None
+    address: str | None = None
+    contact_name: str | None = None
+    contact_phone: str | None = None
+    support_status: str = "normal"
     host: str
     port: int = 80
     username: str
@@ -192,7 +216,12 @@ class RouterCredentialTest(BaseModel):
 
 class RouterUpdate(BaseModel):
     name: str | None = None
+    description: str | None = None
     site: str | None = None
+    address: str | None = None
+    contact_name: str | None = None
+    contact_phone: str | None = None
+    support_status: str | None = None
     host: str | None = None
     port: int | None = None
     username: str | None = None
@@ -206,7 +235,12 @@ class RouterRead(BaseModel):
 
     id: str
     name: str
+    description: str | None
     site: str | None
+    address: str | None
+    contact_name: str | None
+    contact_phone: str | None
+    support_status: str
     host: str
     port: int
     username: str
@@ -314,6 +348,22 @@ class PingRequest(BaseModel):
 
 class SiteCheckRequest(BaseModel):
     url: str
+
+
+class DnsCheckRequest(BaseModel):
+    host: str = "google.com"
+
+
+class DiagnosticRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    router_id: str
+    status: str
+    summary: str
+    result: dict[str, Any]
+    created_by: str | None
+    created_at: datetime
 
 
 class RouterOsUpdateRequest(BaseModel):

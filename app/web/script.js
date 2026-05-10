@@ -5,6 +5,7 @@ const state = {
   metrics: [],
   ports: [],
   blockedClients: [],
+  diagnostics: [],
   appUsers: [],
   status: null,
   summary: null,
@@ -19,13 +20,13 @@ const state = {
 
 const els = {
   subtitle: document.querySelector("#subtitle"),
+  routerDescriptionText: document.querySelector("#routerDescriptionText"),
   routerTitleMeta: document.querySelector("#routerTitleMeta"),
   languageSelect: document.querySelector("#languageSelect"),
   routerSelect: document.querySelector("#routerSelect"),
   addSchoolBtn: document.querySelector("#addSchoolBtn"),
   pingBtn: document.querySelector("#pingBtn"),
   siteCheckBtn: document.querySelector("#siteCheckBtn"),
-  speedtestBtn: document.querySelector("#speedtestBtn"),
   adminPanelBtn: document.querySelector("#adminPanelBtn"),
   userBadge: document.querySelector("#userBadge"),
   logoutBtn: document.querySelector("#logoutBtn"),
@@ -47,11 +48,33 @@ const els = {
   adminRouterModel: document.querySelector("#adminRouterModel"),
   adminRouterVersion: document.querySelector("#adminRouterVersion"),
   adminRouterHost: document.querySelector("#adminRouterHost"),
+  adminRouterSelect: document.querySelector("#adminRouterSelect"),
+  routerDescriptionForm: document.querySelector("#routerDescriptionForm"),
+  routerNameInput: document.querySelector("#routerNameInput"),
+  routerHostInput: document.querySelector("#routerHostInput"),
+  routerPortInput: document.querySelector("#routerPortInput"),
+  routerUsernameInput: document.querySelector("#routerUsernameInput"),
+  routerPasswordInput: document.querySelector("#routerPasswordInput"),
+  routerAccessMethodSelect: document.querySelector("#routerAccessMethodSelect"),
+  routerDescriptionInput: document.querySelector("#routerDescriptionInput"),
+  routerAddressInput: document.querySelector("#routerAddressInput"),
+  routerContactNameInput: document.querySelector("#routerContactNameInput"),
+  routerContactPhoneInput: document.querySelector("#routerContactPhoneInput"),
+  routerSupportStatusSelect: document.querySelector("#routerSupportStatusSelect"),
+  routerEnabledInput: document.querySelector("#routerEnabledInput"),
   refreshIdentityBtn: document.querySelector("#refreshIdentityBtn"),
   osChannelSelect: document.querySelector("#osChannelSelect"),
   osCheckBtn: document.querySelector("#osCheckBtn"),
   osUpdateBtn: document.querySelector("#osUpdateBtn"),
   osUpdateStatus: document.querySelector("#osUpdateStatus"),
+  adminPingHostInput: document.querySelector("#adminPingHostInput"),
+  adminSiteUrlInput: document.querySelector("#adminSiteUrlInput"),
+  adminRouterTestBtn: document.querySelector("#adminRouterTestBtn"),
+  adminRouterPingBtn: document.querySelector("#adminRouterPingBtn"),
+  adminInternetPingBtn: document.querySelector("#adminInternetPingBtn"),
+  adminSiteCheckBtn: document.querySelector("#adminSiteCheckBtn"),
+  adminToolsExportBtn: document.querySelector("#adminToolsExportBtn"),
+  adminToolsStatus: document.querySelector("#adminToolsStatus"),
   userModalMessage: document.querySelector("#userModalMessage"),
   pingModal: document.querySelector("#pingModal"),
   pingForm: document.querySelector("#pingForm"),
@@ -68,12 +91,6 @@ const els = {
   siteWarning: document.querySelector("#siteWarning"),
   siteResult: document.querySelector("#siteResult"),
   siteExportBtn: document.querySelector("#siteExportBtn"),
-  speedtestModal: document.querySelector("#speedtestModal"),
-  speedtestForm: document.querySelector("#speedtestForm"),
-  speedtestModalClose: document.querySelector("#speedtestModalClose"),
-  speedtestWarning: document.querySelector("#speedtestWarning"),
-  speedtestResult: document.querySelector("#speedtestResult"),
-  speedtestExportBtn: document.querySelector("#speedtestExportBtn"),
   schoolModal: document.querySelector("#schoolModal"),
   schoolForm: document.querySelector("#schoolForm"),
   schoolModalClose: document.querySelector("#schoolModalClose"),
@@ -101,6 +118,13 @@ const els = {
   restartBtn: document.querySelector("#restartBtn"),
   actionMessage: document.querySelector("#actionMessage"),
   alertBar: document.querySelector("#alertBar"),
+  supportStatusBadge: document.querySelector("#supportStatusBadge"),
+  supportSiteName: document.querySelector("#supportSiteName"),
+  supportAddress: document.querySelector("#supportAddress"),
+  supportContact: document.querySelector("#supportContact"),
+  supportRouterLine: document.querySelector("#supportRouterLine"),
+  diagnoseBtn: document.querySelector("#diagnoseBtn"),
+  diagnosticResult: document.querySelector("#diagnosticResult"),
   portsList: document.querySelector("#portsList"),
   blockedList: document.querySelector("#blockedList"),
   searchInput: document.querySelector("#searchInput"),
@@ -448,6 +472,10 @@ function isAdmin() {
   return state.auth?.role === "admin";
 }
 
+function isSupport() {
+  return ["admin", "first_support"].includes(state.auth?.role);
+}
+
 function applyAuthState() {
   document.body.dataset.role = state.auth?.role || "";
   els.loginModal.classList.toggle("hidden", Boolean(state.auth?.token));
@@ -460,7 +488,22 @@ async function api(path, options = {}) {
   const headers = new Headers(fetchOptions.headers || {});
   if (state.auth?.token && !noAuth) headers.set("Authorization", `Bearer ${state.auth.token}`);
   const response = await fetch(path, { cache: "no-store", ...fetchOptions, headers });
-  if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = await response.json();
+      detail = data?.detail ? `: ${data.detail}` : "";
+    } catch (_) {
+      detail = "";
+    }
+    if (response.status === 401 && !noAuth) {
+      state.auth = null;
+      localStorage.removeItem("keenetic-auth");
+      applyAuthState();
+      throw new Error("Sessiya bitib. Zəhmət olmasa yenidən daxil ol.");
+    }
+    throw new Error(`${path}: HTTP ${response.status}${detail}`);
+  }
   return response.json();
 }
 
@@ -494,6 +537,8 @@ async function openAdminPanel() {
   els.newUserRoleSelect.value = "user";
   els.userModalMessage.textContent = "";
   els.osUpdateStatus.textContent = "Hazırdır";
+  els.adminToolsStatus.textContent = "Test nəticələri burada görünəcək.";
+  els.adminToolsExportBtn.disabled = true;
   renderAdminRouter();
   els.adminPanelModal.classList.remove("hidden");
   await loadAdminUsers();
@@ -523,6 +568,8 @@ function renderAdminUsers() {
         </div>
         <select class="userRoleSelect" data-user-id="${escapeHtml(user.id)}">
           <option value="user" ${user.role === "user" ? "selected" : ""}>İstifadəçi</option>
+          <option value="call_center" ${user.role === "call_center" ? "selected" : ""}>Call center</option>
+          <option value="first_support" ${user.role === "first_support" ? "selected" : ""}>First support</option>
           <option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option>
         </select>
         <button class="userToggleBtn" type="button" data-user-id="${escapeHtml(user.id)}" data-enabled="${user.enabled ? "false" : "true"}">
@@ -536,10 +583,64 @@ function renderAdminUsers() {
 
 function renderAdminRouter() {
   const router = state.routers.find((item) => item.id === state.selectedRouterId);
+  els.adminRouterSelect.innerHTML = state.routers
+    .map((item) => {
+      const label = [item.name, item.description].filter(Boolean).join(" - ");
+      return `<option value="${escapeHtml(item.id)}">${escapeHtml(label || item.host)} (${escapeHtml(item.host)})</option>`;
+    })
+    .join("");
+  els.adminRouterSelect.value = state.selectedRouterId || "";
   els.adminRouterName.textContent = router?.name || "-";
   els.adminRouterModel.textContent = router?.model || "-";
   els.adminRouterVersion.textContent = router?.firmware_version || "-";
   els.adminRouterHost.textContent = router?.host || "-";
+  els.routerNameInput.value = router?.name || "";
+  els.routerHostInput.value = router?.host || "";
+  els.routerPortInput.value = router?.port || 80;
+  els.routerUsernameInput.value = router?.username || "admin";
+  els.routerPasswordInput.value = "";
+  els.routerAccessMethodSelect.value = router?.access_method || "vpn";
+  els.routerDescriptionInput.value = router?.description || "";
+  els.routerAddressInput.value = router?.address || "";
+  els.routerContactNameInput.value = router?.contact_name || "";
+  els.routerContactPhoneInput.value = router?.contact_phone || "";
+  els.routerSupportStatusSelect.value = router?.support_status || "normal";
+  els.routerEnabledInput.checked = router?.enabled !== false;
+  if (!els.adminPingHostInput.value) els.adminPingHostInput.value = "8.8.8.8";
+  if (!els.adminSiteUrlInput.value) els.adminSiteUrlInput.value = "google.com";
+}
+
+async function saveRouterSettings() {
+  if (!state.selectedRouterId) return;
+  els.osUpdateStatus.textContent = "Router məlumatları saxlanılır...";
+  const payload = {
+    name: els.routerNameInput.value.trim(),
+    host: els.routerHostInput.value.trim(),
+    port: Number(els.routerPortInput.value || 80),
+    username: els.routerUsernameInput.value.trim(),
+    access_method: els.routerAccessMethodSelect.value,
+    description: els.routerDescriptionInput.value.trim(),
+    address: els.routerAddressInput.value.trim(),
+    contact_name: els.routerContactNameInput.value.trim(),
+    contact_phone: els.routerContactPhoneInput.value.trim(),
+    support_status: els.routerSupportStatusSelect.value,
+    enabled: els.routerEnabledInput.checked,
+  };
+  if (els.routerPasswordInput.value) {
+    payload.password = els.routerPasswordInput.value;
+  }
+  const router = await api(`/routers/${state.selectedRouterId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  state.routers = state.routers.map((item) => item.id === router.id ? router : item);
+  state.selectedRouterId = router.id;
+  renderRouterSelect();
+  renderAdminRouter();
+  renderSupportPanel();
+  renderMetrics(state.status, state.summary);
+  els.osUpdateStatus.textContent = "Router məlumatları saxlanıldı.";
 }
 
 async function createAppUser() {
@@ -634,6 +735,7 @@ function schoolPayload() {
   const name = els.schoolDescriptionInput.value.trim();
   return {
     name,
+    description: name,
     site: name,
     host: els.schoolIpInput.value.trim(),
     port: 80,
@@ -677,10 +779,10 @@ function closePingModal() {
 
 async function runPing() {
   if (!state.selectedRouterId) return;
-  els.pingResult.textContent = "Ping...";
+  els.pingResult.textContent = "Routerdən ping...";
   els.pingWarning.textContent = "";
   els.pingExportBtn.disabled = true;
-  const result = await api(`/routers/${state.selectedRouterId}/ping`, {
+  const result = await api(`/routers/${state.selectedRouterId}/cli-ping`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -690,12 +792,81 @@ async function runPing() {
   });
   const lines = [
     `${result.host} (${result.method})`,
+    "Mənbə: Router CLI",
     `avg=${result.avg_ms ?? "-"} ms loss=${result.loss_percent ?? "-"}%`,
     result.output || JSON.stringify(result, null, 2),
   ];
   els.pingResult.textContent = lines.join("\n");
   els.pingWarning.textContent = result.warning ? "Xəbərdarlıq: ping gecikməsi 120 ms-dən yüksəkdir." : "";
   els.pingExportBtn.disabled = false;
+}
+
+async function adminRunRouterTest() {
+  if (!state.selectedRouterId) return;
+  els.adminToolsStatus.textContent = "Router RCI test edilir...";
+  els.adminToolsExportBtn.disabled = true;
+  const result = await api(`/routers/${state.selectedRouterId}/test`, { method: "POST" });
+  els.adminToolsStatus.textContent = `Router RCI test: ${result.status || "ok"}`;
+  els.adminToolsExportBtn.disabled = false;
+}
+
+async function adminRunPing(host) {
+  if (!state.selectedRouterId) return;
+  els.adminToolsStatus.textContent = `${host} ping edilir...`;
+  els.adminToolsExportBtn.disabled = true;
+  const result = await api(`/routers/${state.selectedRouterId}/cli-ping`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ host, count: 4 }),
+  });
+  els.adminToolsStatus.textContent = [
+    `${result.host} (${result.method})`,
+    "Mənbə: Router CLI",
+    `Status: ${result.ok ? "əlçatandır" : "əlçatmaz"}`,
+    `avg=${result.avg_ms ?? "-"} ms loss=${result.loss_percent ?? "-"}%`,
+    result.output || JSON.stringify(result, null, 2),
+  ].join("\n");
+  els.adminToolsExportBtn.disabled = false;
+}
+
+async function adminRunServerPing(host) {
+  if (!state.selectedRouterId) return;
+  els.adminToolsStatus.textContent = `${host} serverdən ping edilir...`;
+  els.adminToolsExportBtn.disabled = true;
+  const result = await api(`/routers/${state.selectedRouterId}/ping`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ host, count: 4 }),
+  });
+  els.adminToolsStatus.textContent = [
+    `${result.host} (${result.method})`,
+    "Mənbə: Monitor server",
+    `Status: ${result.ok ? "əlçatandır" : "əlçatmaz"}`,
+    `avg=${result.avg_ms ?? "-"} ms loss=${result.loss_percent ?? "-"}%`,
+    result.output || JSON.stringify(result, null, 2),
+  ].join("\n");
+  els.adminToolsExportBtn.disabled = false;
+}
+
+async function adminRunSiteCheck() {
+  els.adminToolsStatus.textContent = "Routerdən sayt ping yoxlanır...";
+  els.adminToolsExportBtn.disabled = true;
+  const result = await api(`/routers/${state.selectedRouterId}/cli-site-check`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: els.adminSiteUrlInput.value.trim() || "google.com" }),
+  });
+  els.adminToolsStatus.textContent = [
+    `URL: ${result.url}`,
+    `Host: ${result.host}`,
+    `Metod: ${result.method}`,
+    `Status: ${result.ok ? "əlçatandır" : "əlçatmaz"}`,
+    `Ping: ${result.avg_ms ?? "-"} ms · loss=${result.loss_percent ?? "-"}%`,
+    `Mesaj: ${result.message || "-"}`,
+    "",
+    result.output || JSON.stringify(result, null, 2),
+  ].join("\n");
+  els.adminToolsExportBtn.disabled = false;
 }
 
 function openSiteCheckModal() {
@@ -713,53 +884,27 @@ function closeSiteCheckModal() {
 }
 
 async function runSiteCheck() {
-  els.siteResult.textContent = "Yoxlanır...";
+  els.siteResult.textContent = "Routerdən sayt ping yoxlanır...";
   els.siteWarning.textContent = "";
   els.siteExportBtn.disabled = true;
-  const result = await api("/site-check", {
+  const result = await api(`/routers/${state.selectedRouterId}/cli-site-check`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url: els.siteUrlInput.value.trim() }),
   });
   const lines = [
     `URL: ${result.url}`,
-    `Status: ${result.ok ? "əlçatandır" : "əlçatmaz"} (${result.status_code ?? "-"})`,
-    `Cavab müddəti: ${result.elapsed_ms} ms`,
+    `Host: ${result.host}`,
+    `Metod: ${result.method}`,
+    `Status: ${result.ok ? "əlçatandır" : "əlçatmaz"}`,
+    `Ping: ${result.avg_ms ?? "-"} ms · loss=${result.loss_percent ?? "-"}%`,
     `Mesaj: ${result.message || "-"}`,
+    "",
+    result.output || JSON.stringify(result, null, 2),
   ];
   els.siteResult.textContent = lines.join("\n");
   els.siteWarning.textContent = result.warning ? "Xəbərdarlıq: sayt gec cavab verir və ya əlçatmazdır." : "";
   els.siteExportBtn.disabled = false;
-}
-
-function openSpeedtestModal() {
-  els.speedtestWarning.textContent = "";
-  els.speedtestResult.textContent = "";
-  els.speedtestExportBtn.disabled = true;
-  els.speedtestModal.classList.remove("hidden");
-}
-
-function closeSpeedtestModal() {
-  els.speedtestModal.classList.add("hidden");
-}
-
-async function runSpeedtest() {
-  els.speedtestResult.textContent = "Speedtest işləyir...";
-  els.speedtestWarning.textContent = "";
-  els.speedtestExportBtn.disabled = true;
-  const result = await api("/speedtest", { method: "POST" });
-  const lines = result.ok
-    ? [
-        `Alət: ${result.tool || "speedtest-cli"}`,
-        `Download: ${result.download_mbps} Mbps`,
-        `Upload: ${result.upload_mbps} Mbps`,
-        `Ping: ${result.ping_ms} ms`,
-        `Server: ${[result.server?.sponsor, result.server?.name, result.server?.country].filter(Boolean).join(" · ") || "-"}`,
-      ]
-    : ["Speedtest alınmadı", ...(result.errors || [])];
-  els.speedtestResult.textContent = lines.join("\n");
-  els.speedtestWarning.textContent = result.warning ? "Xəbərdarlıq: sürət aşağıdır və ya test alınmadı." : "";
-  els.speedtestExportBtn.disabled = false;
 }
 
 function exportText(filename, text) {
@@ -832,13 +977,14 @@ async function loadDashboard() {
   }
 
   const now = Date.now();
-  const [status, clients, summary, ports, blockedClients, wifiInfo] = await Promise.all([
+  const [status, clients, summary, ports, blockedClients, wifiInfo, diagnostics] = await Promise.all([
     api(`/routers/${state.selectedRouterId}/status`).catch(() => null),
     api(`/routers/${state.selectedRouterId}/clients`).catch(() => []),
     api(`/routers/${state.selectedRouterId}/summary`).catch(() => null),
     api(`/routers/${state.selectedRouterId}/ports`).catch(() => []),
     api(`/routers/${state.selectedRouterId}/blocked-clients`).catch(() => []),
     api(`/routers/${state.selectedRouterId}/wifi`).catch(() => []),
+    api(`/routers/${state.selectedRouterId}/diagnostics`).catch(() => []),
   ]);
   const clientRows = Array.isArray(clients) ? clients : [];
 
@@ -864,8 +1010,10 @@ async function loadDashboard() {
   state.status = status;
   state.summary = summary;
   state.blockedClients = Array.isArray(blockedClients) ? blockedClients : [];
+  state.diagnostics = Array.isArray(diagnostics) ? diagnostics : [];
 
   renderMetrics(status, summary);
+  renderSupportPanel();
   renderWifiInfo(Array.isArray(wifiInfo) ? wifiInfo : []);
   renderPorts(state.ports);
   renderBlockedClients(state.blockedClients);
@@ -914,7 +1062,10 @@ async function loadClientMetrics() {
 
 function renderRouterSelect() {
   els.routerSelect.innerHTML = state.routers
-    .map((router) => `<option value="${router.id}">${escapeHtml(router.name)} (${escapeHtml(router.host)})</option>`)
+    .map((router) => {
+      const label = [router.name, router.description].filter(Boolean).join(" - ");
+      return `<option value="${router.id}">${escapeHtml(label || router.host)} (${escapeHtml(router.host)})</option>`;
+    })
     .join("");
   els.routerSelect.value = state.selectedRouterId || "";
 }
@@ -924,6 +1075,8 @@ function renderMetrics(status, summary) {
   const routerMeta = [router?.name, router?.model, router?.firmware_version].filter(Boolean).join(" · ");
   els.routerTitleMeta.textContent = routerMeta || "-";
   els.subtitle.textContent = router ? `${router.host} · ${formatTime(status?.last_seen)}` : t("notSelected");
+  els.routerDescriptionText.textContent = router?.description || "Router qeydi yoxdur";
+  els.routerDescriptionText.title = router?.description || "";
   els.statusValue.textContent = status?.online ? "Online" : "Offline";
   els.statusValue.style.color = status?.online ? "var(--accent)" : "var(--bad)";
   els.clientCount.textContent = String(summary?.client_count ?? state.clients.length);
@@ -933,6 +1086,59 @@ function renderMetrics(status, summary) {
   els.lanTrafficValue.innerHTML = formatTrafficPair(summary?.lan_rx_bps, summary?.lan_tx_bps);
   els.wifiTrafficValue.innerHTML = formatTrafficPair(summary?.wifi_rx_bps, summary?.wifi_tx_bps);
 }
+
+function renderSupportPanel() {
+  const router = state.routers.find((item) => item.id === state.selectedRouterId);
+  const lastDiagnostic = state.diagnostics[0];
+  const badgeState = lastDiagnostic?.status || router?.support_status || "normal";
+  els.supportStatusBadge.textContent = badgeState;
+  els.supportStatusBadge.className = `supportStatusBadge ${badgeState}`;
+  els.supportSiteName.textContent = router?.name || "-";
+  els.supportAddress.textContent = router?.address || router?.description || "-";
+  els.supportContact.textContent = [router?.contact_name, router?.contact_phone].filter(Boolean).join(" · ") || "-";
+  els.supportRouterLine.textContent = router ? `${router.host} · ${router.model || "-"} · ${router.firmware_version || "-"}` : "-";
+  if (lastDiagnostic) {
+    els.diagnosticResult.textContent = formatDiagnostic(lastDiagnostic);
+  } else {
+    els.diagnosticResult.textContent = "Diaqnostika nəticəsi burada görünəcək.";
+  }
+}
+
+function formatDiagnostic(row) {
+  const result = row.result || {};
+  const tests = result.tests || {};
+  const status = result.status || {};
+  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+  return [
+    `Nəticə: ${row.summary}`,
+    `Status: ${row.status} · ${formatTime(row.created_at)} · ${row.created_by || "-"}`,
+    `WAN: ${status.wan_status || "-"} · ${status.wan_ip || "-"}`,
+    `CPU/RAM/Uptime: ${formatPercent(status.cpu_usage)} · ${formatPercent(status.ram_usage)} · ${formatUptime(status.uptime)}`,
+    `Client: ${result.client_count ?? "-"}`,
+    `Router ping: ${tests.router_ping?.ok ? "OK" : "FAIL"} · ${tests.router_ping?.avg_ms ?? "-"} ms`,
+    `RCI: ${tests.rci?.ok ? "OK" : "FAIL"}`,
+    `Internet ping: ${tests.internet_ping?.ok ? "OK" : "FAIL"} · ${tests.internet_ping?.avg_ms ?? "-"} ms`,
+    `DNS: ${tests.dns?.ok ? "OK" : "FAIL"} · ${(tests.dns?.addresses || []).join(", ") || "-"}`,
+    `Sayt ping: ${tests.site?.ok ? "OK" : "FAIL"} · ${tests.site?.avg_ms ?? "-"} ms`,
+    warnings.length ? `Xəbərdarlıq: ${warnings.join("; ")}` : "Xəbərdarlıq yoxdur",
+    "",
+    result.operator_script || "",
+  ].join("\n");
+}
+
+async function runOneClickDiagnostic() {
+  if (!state.selectedRouterId) return;
+  els.diagnosticResult.textContent = "Diaqnostika işləyir...";
+  els.diagnoseBtn.disabled = true;
+  try {
+    const result = await api(`/routers/${state.selectedRouterId}/diagnose`, { method: "POST" });
+    state.diagnostics = [result, ...state.diagnostics].slice(0, 10);
+    renderSupportPanel();
+  } finally {
+    els.diagnoseBtn.disabled = false;
+  }
+}
+
 
 function formatTrafficPair(rx, tx) {
   if (rx === null && tx === null) return `<span class="muted">${escapeHtml(t("noTraffic"))}</span>`;
@@ -1038,7 +1244,7 @@ function renderEmpty(message) {
 }
 
 function renderClientAction(client) {
-  if (!isAdmin()) return '<span class="muted">-</span>';
+  if (!isSupport()) return '<span class="muted">-</span>';
   if (!client.mac) return '<span class="muted">-</span>';
   return `
     <button class="dangerBtn clientBlockBtn" type="button" data-mac="${escapeHtml(client.mac)}" data-blocked="true">${escapeHtml(t("block"))}</button>
@@ -1289,6 +1495,21 @@ els.refreshIdentityBtn.addEventListener("click", () => {
     els.osUpdateStatus.textContent = error.message;
   });
 });
+els.adminRouterSelect.addEventListener("change", () => {
+  state.selectedRouterId = els.adminRouterSelect.value;
+  state.previousClients.clear();
+  renderRouterSelect();
+  renderAdminRouter();
+  loadDashboard().catch((error) => {
+    els.osUpdateStatus.textContent = error.message;
+  });
+});
+els.routerDescriptionForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveRouterSettings().catch((error) => {
+    els.osUpdateStatus.textContent = error.message;
+  });
+});
 els.osCheckBtn.addEventListener("click", () => {
   checkRouterOs().catch((error) => {
     els.osUpdateStatus.textContent = error.message;
@@ -1298,6 +1519,30 @@ els.osUpdateBtn.addEventListener("click", () => {
   updateRouterOs().catch((error) => {
     els.osUpdateStatus.textContent = error.message;
   });
+});
+els.adminRouterTestBtn.addEventListener("click", () => {
+  adminRunRouterTest().catch((error) => {
+    els.adminToolsStatus.textContent = error.message;
+  });
+});
+els.adminRouterPingBtn.addEventListener("click", () => {
+  const router = state.routers.find((item) => item.id === state.selectedRouterId);
+  adminRunServerPing(router?.host || els.adminPingHostInput.value.trim()).catch((error) => {
+    els.adminToolsStatus.textContent = error.message;
+  });
+});
+els.adminInternetPingBtn.addEventListener("click", () => {
+  adminRunPing(els.adminPingHostInput.value.trim() || "8.8.8.8").catch((error) => {
+    els.adminToolsStatus.textContent = error.message;
+  });
+});
+els.adminSiteCheckBtn.addEventListener("click", () => {
+  adminRunSiteCheck().catch((error) => {
+    els.adminToolsStatus.textContent = error.message;
+  });
+});
+els.adminToolsExportBtn.addEventListener("click", () => {
+  exportText("admin-test-result.txt", els.adminToolsStatus.textContent || "");
 });
 
 els.pingBtn.addEventListener("click", openPingModal);
@@ -1330,21 +1575,6 @@ els.siteExportBtn.addEventListener("click", () => {
   exportText("site-check-result.txt", els.siteResult.textContent || "");
 });
 
-els.speedtestBtn.addEventListener("click", openSpeedtestModal);
-els.speedtestModalClose.addEventListener("click", closeSpeedtestModal);
-els.speedtestModal.addEventListener("click", (event) => {
-  if (event.target === els.speedtestModal) closeSpeedtestModal();
-});
-els.speedtestForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  runSpeedtest().catch((error) => {
-    els.speedtestResult.textContent = error.message;
-  });
-});
-els.speedtestExportBtn.addEventListener("click", () => {
-  exportText("speedtest-result.txt", els.speedtestResult.textContent || "");
-});
-
 els.languageSelect.addEventListener("change", () => {
   state.lang = els.languageSelect.value;
   localStorage.setItem("keenetic-lang", state.lang);
@@ -1356,6 +1586,12 @@ els.languageSelect.addEventListener("change", () => {
 });
 
 els.refreshBtn.addEventListener("click", refresh);
+els.diagnoseBtn.addEventListener("click", () => {
+  runOneClickDiagnostic().catch((error) => {
+    els.diagnosticResult.textContent = error.message;
+    els.diagnoseBtn.disabled = false;
+  });
+});
 els.searchInput.addEventListener("input", () => {
   state.search = els.searchInput.value;
   renderClients();

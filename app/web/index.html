@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Keenetic Monitor</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260510-admin-router-edit" />
   </head>
   <body>
     <header class="topbar">
@@ -14,6 +14,7 @@
           <span id="routerTitleMeta" class="routerTitleMeta">-</span>
         </div>
         <p id="subtitle" data-i18n="loadingRouters">Router və clientlər yüklənir</p>
+        <p id="routerDescriptionText" class="routerDescriptionText">-</p>
       </div>
       <div class="actions">
         <select id="languageSelect" aria-label="Dil seç">
@@ -23,9 +24,8 @@
         </select>
         <select id="routerSelect" aria-label="Router seç"></select>
         <button id="addSchoolBtn" class="allowBtn adminOnly" type="button" data-i18n="addSchool">Məktəb əlavə et</button>
-        <button id="pingBtn" type="button">Ping</button>
-        <button id="siteCheckBtn" type="button">Sayt yoxla</button>
-        <button id="speedtestBtn" type="button">Speedtest</button>
+        <button id="pingBtn" type="button">Routerdən ping</button>
+        <button id="siteCheckBtn" type="button">Routerdən sayt ping</button>
         <button id="adminPanelBtn" class="adminOnly userBadge" type="button">Admin panel</button>
         <span id="userBadge" class="userBadge userOnly">-</span>
         <button id="logoutBtn" type="button">Çıxış</button>
@@ -82,6 +82,8 @@
               <input id="newUserPasswordInput" type="password" minlength="4" maxlength="120" placeholder="Parol" required />
               <select id="newUserRoleSelect">
                 <option value="user">İstifadəçi</option>
+                <option value="call_center">Call center</option>
+                <option value="first_support">First support</option>
                 <option value="admin">Admin</option>
               </select>
               <button class="allowBtn" type="submit">Əlavə et</button>
@@ -91,14 +93,78 @@
 
           <section class="adminSection">
             <div class="adminSectionHead">
-              <h3>Router və OS</h3>
+              <h3>Router idarəetməsi</h3>
               <span id="adminRouterName" class="muted">-</span>
             </div>
+            <label class="adminFullLabel">
+              <span>Router seç</span>
+              <select id="adminRouterSelect"></select>
+            </label>
             <div class="adminKv">
               <span>Model</span><strong id="adminRouterModel">-</strong>
               <span>Versiya</span><strong id="adminRouterVersion">-</strong>
               <span>IP</span><strong id="adminRouterHost">-</strong>
             </div>
+            <form id="routerDescriptionForm" class="routerDescriptionForm">
+              <label>
+                <span>Ad</span>
+                <input id="routerNameInput" type="text" maxlength="120" placeholder="Router adı" required />
+              </label>
+              <label>
+                <span>IP</span>
+                <input id="routerHostInput" type="text" maxlength="120" placeholder="10.8.92.6" required />
+              </label>
+              <label>
+                <span>Port</span>
+                <input id="routerPortInput" type="number" min="1" max="65535" value="80" required />
+              </label>
+              <label>
+                <span>Login</span>
+                <input id="routerUsernameInput" type="text" maxlength="120" placeholder="admin" required />
+              </label>
+              <label>
+                <span>Yeni parol</span>
+                <input id="routerPasswordInput" type="password" maxlength="120" placeholder="Boş saxla: dəyişməsin" />
+              </label>
+              <label>
+                <span>Giriş növü</span>
+                <select id="routerAccessMethodSelect">
+                  <option value="vpn">VPN</option>
+                  <option value="http_proxy">HTTP proxy</option>
+                  <option value="keendns">KeenDNS</option>
+                </select>
+              </label>
+              <label>
+                <span>Router qeydi</span>
+                <textarea id="routerDescriptionInput" rows="3" maxlength="1000" placeholder="Məktəb, otaq, məsul şəxs, müqavilə və ya əlavə qeyd"></textarea>
+              </label>
+              <label>
+                <span>Ünvan</span>
+                <textarea id="routerAddressInput" rows="3" maxlength="1000" placeholder="Müəssisə ünvanı"></textarea>
+              </label>
+              <label>
+                <span>Məsul şəxs</span>
+                <input id="routerContactNameInput" type="text" maxlength="120" placeholder="Ad Soyad" />
+              </label>
+              <label>
+                <span>Telefon</span>
+                <input id="routerContactPhoneInput" type="text" maxlength="64" placeholder="+994..." />
+              </label>
+              <label>
+                <span>Support status</span>
+                <select id="routerSupportStatusSelect">
+                  <option value="normal">Normal</option>
+                  <option value="warning">Xəbərdarlıq</option>
+                  <option value="critical">Kritik</option>
+                  <option value="maintenance">Servis</option>
+                </select>
+              </label>
+              <label class="checkboxLine">
+                <input id="routerEnabledInput" type="checkbox" />
+                <span>Aktiv monitorinq</span>
+              </label>
+              <button class="allowBtn" type="submit">Routeri saxla</button>
+            </form>
             <div class="adminActions">
               <button id="refreshIdentityBtn" type="button">Məlumatı yenilə</button>
               <select id="osChannelSelect" aria-label="OS kanalı">
@@ -110,6 +176,31 @@
               <button id="osUpdateBtn" class="dangerBtn" type="button">OS yenilə</button>
             </div>
             <pre id="osUpdateStatus" class="adminLog">Hazırdır</pre>
+          </section>
+
+          <section class="adminSection">
+            <div class="adminSectionHead">
+              <h3>Test alətləri</h3>
+              <span class="muted">Router və internet</span>
+            </div>
+            <div class="adminToolsGrid">
+              <label>
+                <span>Ping host</span>
+                <input id="adminPingHostInput" type="text" placeholder="Router IP və ya 8.8.8.8" />
+              </label>
+              <label>
+                <span>Sayt</span>
+                <input id="adminSiteUrlInput" type="text" placeholder="google.com" />
+              </label>
+            </div>
+            <div class="adminActions">
+              <button id="adminRouterTestBtn" type="button">Router RCI test</button>
+              <button id="adminRouterPingBtn" type="button">Serverdən router ping</button>
+              <button id="adminInternetPingBtn" type="button">Routerdən internet ping</button>
+              <button id="adminSiteCheckBtn" type="button">Routerdən sayt ping</button>
+              <button id="adminToolsExportBtn" type="button" disabled>Nəticəni çıxart</button>
+            </div>
+            <pre id="adminToolsStatus" class="adminLog">Test nəticələri burada görünəcək.</pre>
           </section>
         </div>
       </div>
@@ -154,8 +245,8 @@
       <form id="pingForm" class="modalPanel">
         <div class="modalHeader">
           <div>
-            <h2 id="pingModalTitle">Ping</h2>
-            <p>IP ünvanı və neçə dəfə ping atılacağını yaz.</p>
+            <h2 id="pingModalTitle">Routerdən ping</h2>
+            <p>Ping routerin Telnet CLI-sindən işləyir.</p>
           </div>
           <button id="pingModalClose" class="iconBtn" type="button" aria-label="Bağla">×</button>
         </div>
@@ -182,8 +273,8 @@
       <form id="siteCheckForm" class="modalPanel">
         <div class="modalHeader">
           <div>
-            <h2 id="siteCheckModalTitle">Sayt yoxla</h2>
-            <p>Saytın əlçatanlığını və cavab müddətini yoxla.</p>
+            <h2 id="siteCheckModalTitle">Routerdən sayt ping</h2>
+            <p>Router CLI HTTP status verə bilmir; domain DNS+ICMP ping yoxlanır.</p>
           </div>
           <button id="siteCheckModalClose" class="iconBtn" type="button" aria-label="Bağla">×</button>
         </div>
@@ -199,24 +290,6 @@
         </div>
         <p id="siteWarning" class="message warningMessage"></p>
         <pre id="siteResult" class="pingResult"></pre>
-      </form>
-    </div>
-
-    <div id="speedtestModal" class="modalOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="speedtestModalTitle">
-      <form id="speedtestForm" class="modalPanel">
-        <div class="modalHeader">
-          <div>
-            <h2 id="speedtestModalTitle">Speedtest</h2>
-            <p>Serverdən internet download sürətini yoxla.</p>
-          </div>
-          <button id="speedtestModalClose" class="iconBtn" type="button" aria-label="Bağla">×</button>
-        </div>
-        <div class="modalActions">
-          <button id="speedtestExportBtn" type="button" disabled>Nəticəni çıxart</button>
-          <button type="submit">Yoxla</button>
-        </div>
-        <p id="speedtestWarning" class="message warningMessage"></p>
-        <pre id="speedtestResult" class="pingResult"></pre>
       </form>
     </div>
 
@@ -240,6 +313,29 @@
         </div>
       </section>
       <div id="alertBar" class="alertBar hidden"></div>
+
+      <section class="supportDeskGrid">
+        <section class="panel supportCard">
+          <div class="panelHeader">
+            <h2>Müştəri kartı</h2>
+            <span id="supportStatusBadge" class="supportStatusBadge">-</span>
+          </div>
+          <div class="supportInfoGrid">
+            <span>Müəssisə</span><strong id="supportSiteName">-</strong>
+            <span>Ünvan</span><strong id="supportAddress">-</strong>
+            <span>Məsul şəxs</span><strong id="supportContact">-</strong>
+            <span>Router</span><strong id="supportRouterLine">-</strong>
+          </div>
+        </section>
+
+        <section class="panel supportCard">
+          <div class="panelHeader">
+            <h2>Bir klik diaqnostika</h2>
+            <button id="diagnoseBtn" type="button">Diaqnostika et</button>
+          </div>
+          <pre id="diagnosticResult" class="supportLog">Diaqnostika nəticəsi burada görünəcək.</pre>
+        </section>
+      </section>
 
       <section class="overviewGrid" aria-label="Router status" data-i18n-aria="routerStatus">
         <section class="panel statusPanel" data-panel="status">
@@ -297,13 +393,13 @@
           </div>
           <div class="formRow">
             <input id="wifiSsidInput" type="text" minlength="1" maxlength="32" placeholder="Yeni Wi-Fi adı" data-i18n-placeholder="newWifiName" />
-            <button id="wifiSsidBtn" class="adminOnly" type="button" data-i18n="changeName">Adı dəyiş</button>
+            <button id="wifiSsidBtn" class="adminOnly supportAllowed" type="button" data-i18n="changeName">Adı dəyiş</button>
           </div>
           <div class="formRow">
             <input id="wifiPasswordInput" type="password" minlength="8" maxlength="63" placeholder="Yeni Wi-Fi şifrəsi" data-i18n-placeholder="newWifiPassword" />
-            <button class="adminOnly" type="submit" data-i18n="change">Dəyiş</button>
+            <button class="adminOnly supportAllowed" type="submit" data-i18n="change">Dəyiş</button>
           </div>
-          <div class="buttonRow adminOnly">
+          <div class="buttonRow adminOnly supportAllowed">
             <button id="wifiOffBtn" class="dangerBtn" type="button" data-i18n="wifiOff">Wi-Fi söndür</button>
             <button id="wifiOnBtn" class="allowBtn" type="button" data-i18n="wifiOn">Wi-Fi aç</button>
           </div>
@@ -367,6 +463,6 @@
       </section>
     </main>
 
-    <script src="/static/script.js"></script>
+    <script src="/static/script.js?v=20260510-admin-router-edit"></script>
   </body>
 </html>
