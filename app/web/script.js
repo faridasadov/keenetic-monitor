@@ -13,7 +13,12 @@ const state = {
   lang: localStorage.getItem("keenetic-lang") || "az",
   sectionPrefs: JSON.parse(localStorage.getItem("keenetic-section-prefs") || "{}"),
   viewScale: localStorage.getItem("keenetic-view-scale") || "normal",
+  panelOrder: JSON.parse(localStorage.getItem("keenetic-panel-order") || "[]"),
+  panelSizes: JSON.parse(localStorage.getItem("keenetic-panel-sizes") || "{}"),
   previousClients: new Map(),
+  heavyLoadedAt: 0,
+  dashboardLoading: false,
+  dashboardNeedsHeavy: false,
   filter: "all",
   search: "",
 };
@@ -106,8 +111,11 @@ const els = {
   cpuValue: document.querySelector("#cpuValue"),
   ramValue: document.querySelector("#ramValue"),
   uptimeValue: document.querySelector("#uptimeValue"),
+  totalTrafficValue: document.querySelector("#totalTrafficValue"),
   lanTrafficValue: document.querySelector("#lanTrafficValue"),
   wifiTrafficValue: document.querySelector("#wifiTrafficValue"),
+  maxTrafficValue: document.querySelector("#maxTrafficValue"),
+  maxClientValue: document.querySelector("#maxClientValue"),
   wifiForm: document.querySelector("#wifiForm"),
   wifiInfoList: document.querySelector("#wifiInfoList"),
   wifiSsidInput: document.querySelector("#wifiSsidInput"),
@@ -118,6 +126,7 @@ const els = {
   restartBtn: document.querySelector("#restartBtn"),
   actionMessage: document.querySelector("#actionMessage"),
   alertBar: document.querySelector("#alertBar"),
+  dashboardGrid: document.querySelector("#dashboardGrid"),
   supportStatusBadge: document.querySelector("#supportStatusBadge"),
   supportSiteName: document.querySelector("#supportSiteName"),
   supportAddress: document.querySelector("#supportAddress"),
@@ -138,7 +147,7 @@ const els = {
 const translations = {
   az: {
     action: "Əməl",
-    addSchool: "Məktəb əlavə et",
+    addSchool: "Yeni məktəb",
     addSchoolHint: "Router məlumatlarını yaz, əvvəl test et, sonra təsdiqlə.",
     all: "Hamısı",
     allow: "Aç",
@@ -217,7 +226,7 @@ const translations = {
   },
   ru: {
     action: "Действие",
-    addSchool: "Добавить школу",
+    addSchool: "Новая школа",
     addSchoolHint: "Введите данные роутера, сначала проверьте, затем подтвердите.",
     all: "Все",
     allow: "Открыть",
@@ -296,7 +305,7 @@ const translations = {
   },
   en: {
     action: "Action",
-    addSchool: "Add school",
+    addSchool: "New school",
     addSchoolHint: "Enter router details, test first, then confirm.",
     all: "All",
     allow: "Allow",
@@ -956,7 +965,7 @@ async function confirmSchoolRouter() {
   state.selectedRouterId = router.id;
   els.schoolModalMessage.textContent = t("routerAdded");
   await loadRouters();
-  await loadDashboard();
+  await loadDashboard({ forceHeavy: true });
   closeSchoolModal();
 }
 
@@ -968,58 +977,74 @@ async function loadRouters() {
   renderRouterSelect();
 }
 
-async function loadDashboard() {
-  if (!state.selectedRouterId) {
-    renderEmpty(t("noRouter"));
-    renderPorts([]);
-    renderBlockedClients([]);
+async function loadDashboard(options = {}) {
+  if (state.dashboardLoading) {
+    if (options.forceHeavy) state.dashboardNeedsHeavy = true;
     return;
   }
+  state.dashboardLoading = true;
+  try {
+    if (!state.selectedRouterId) {
+      renderEmpty(t("noRouter"));
+      renderPorts([]);
+      renderBlockedClients([]);
+      return;
+    }
 
-  const now = Date.now();
-  const [status, clients, summary, ports, blockedClients, wifiInfo, diagnostics] = await Promise.all([
-    api(`/routers/${state.selectedRouterId}/status`).catch(() => null),
-    api(`/routers/${state.selectedRouterId}/clients`).catch(() => []),
-    api(`/routers/${state.selectedRouterId}/summary`).catch(() => null),
-    api(`/routers/${state.selectedRouterId}/ports`).catch(() => []),
-    api(`/routers/${state.selectedRouterId}/blocked-clients`).catch(() => []),
-    api(`/routers/${state.selectedRouterId}/wifi`).catch(() => []),
-    api(`/routers/${state.selectedRouterId}/diagnostics`).catch(() => []),
-  ]);
-  const clientRows = Array.isArray(clients) ? clients : [];
+    const now = Date.now();
+    const forceHeavy = Boolean(options.forceHeavy);
+    const loadHeavy = forceHeavy || !state.heavyLoadedAt || now - state.heavyLoadedAt > 60000;
+    const [status, clients, summary, blockedClients, diagnostics, ports, wifiInfo] = await Promise.all([
+      api(`/routers/${state.selectedRouterId}/status`).catch(() => null),
+      api(`/routers/${state.selectedRouterId}/clients`).catch(() => []),
+      api(`/routers/${state.selectedRouterId}/summary`).catch(() => null),
+      api(`/routers/${state.selectedRouterId}/blocked-clients`).catch(() => []),
+      api(`/routers/${state.selectedRouterId}/diagnostics`).catch(() => []),
+      loadHeavy ? api(`/routers/${state.selectedRouterId}/ports`).catch(() => []) : Promise.resolve(state.ports),
+      loadHeavy ? api(`/routers/${state.selectedRouterId}/wifi`).catch(() => []) : Promise.resolve(null),
+    ]);
+    const clientRows = Array.isArray(clients) ? clients : [];
 
-  const previous = new Map(state.previousClients);
-  state.previousClients = new Map(
-    clientRows.map((client) => [
-      clientKey(client),
-      {
-        rx: { bytes: client.rx_bytes, time: now },
-        tx: { bytes: client.tx_bytes, time: now },
-      },
-    ]),
-  );
-  state.clients = clientRows.map((client) => {
-    const old = previous.get(clientKey(client));
-    return {
-      ...client,
-      rx_speed: formatSpeed({ bytes: client.rx_bytes, time: now }, old?.rx),
-      tx_speed: formatSpeed({ bytes: client.tx_bytes, time: now }, old?.tx),
-    };
-  });
-  state.ports = Array.isArray(ports) ? ports : [];
-  state.status = status;
-  state.summary = summary;
-  state.blockedClients = Array.isArray(blockedClients) ? blockedClients : [];
-  state.diagnostics = Array.isArray(diagnostics) ? diagnostics : [];
+    const previous = new Map(state.previousClients);
+    state.previousClients = new Map(
+      clientRows.map((client) => [
+        clientKey(client),
+        {
+          rx: { bytes: client.rx_bytes, time: now },
+          tx: { bytes: client.tx_bytes, time: now },
+        },
+      ]),
+    );
+    state.clients = clientRows.map((client) => {
+      const old = previous.get(clientKey(client));
+      return {
+        ...client,
+        rx_speed: formatSpeed({ bytes: client.rx_bytes, time: now }, old?.rx),
+        tx_speed: formatSpeed({ bytes: client.tx_bytes, time: now }, old?.tx),
+      };
+    });
+    state.ports = Array.isArray(ports) ? ports : [];
+    state.status = status;
+    state.summary = summary;
+    state.blockedClients = Array.isArray(blockedClients) ? blockedClients : [];
+    state.diagnostics = Array.isArray(diagnostics) ? diagnostics : [];
+    if (loadHeavy) state.heavyLoadedAt = now;
 
-  renderMetrics(status, summary);
-  renderSupportPanel();
-  renderWifiInfo(Array.isArray(wifiInfo) ? wifiInfo : []);
-  renderPorts(state.ports);
-  renderBlockedClients(state.blockedClients);
-  renderClients();
-  renderAlerts();
-  loadClientMetrics();
+    renderMetrics(status, summary);
+    renderSupportPanel();
+    if (Array.isArray(wifiInfo)) renderWifiInfo(wifiInfo);
+    renderPorts(state.ports);
+    renderBlockedClients(state.blockedClients);
+    renderClients();
+    renderAlerts();
+    if (loadHeavy) loadClientMetrics();
+  } finally {
+    state.dashboardLoading = false;
+    if (state.dashboardNeedsHeavy) {
+      state.dashboardNeedsHeavy = false;
+      await loadDashboard({ forceHeavy: true });
+    }
+  }
 }
 
 function renderAlerts() {
@@ -1083,8 +1108,11 @@ function renderMetrics(status, summary) {
   els.cpuValue.textContent = formatPercent(status?.cpu_usage);
   els.ramValue.textContent = formatPercent(status?.ram_usage);
   els.uptimeValue.textContent = formatUptime(status?.uptime);
+  els.totalTrafficValue.innerHTML = formatTrafficPair(summary?.total_rx_bps, summary?.total_tx_bps);
   els.lanTrafficValue.innerHTML = formatTrafficPair(summary?.lan_rx_bps, summary?.lan_tx_bps);
   els.wifiTrafficValue.innerHTML = formatTrafficPair(summary?.wifi_rx_bps, summary?.wifi_tx_bps);
+  els.maxTrafficValue.textContent = formatBits(summary?.max_traffic_bps);
+  els.maxClientValue.textContent = String(summary?.max_client_count ?? summary?.client_count ?? state.clients.length);
 }
 
 function renderSupportPanel() {
@@ -1109,19 +1137,32 @@ function formatDiagnostic(row) {
   const tests = result.tests || {};
   const status = result.status || {};
   const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+  const testLine = (label, test, detail = "") => {
+    const state = test?.ok ? "OK" : "FAIL";
+    const latency = test?.avg_ms === undefined || test?.avg_ms === null ? "" : ` · ${test.avg_ms} ms`;
+    return `${label.padEnd(18, " ")} ${state}${latency}${detail}`;
+  };
   return [
-    `Nəticə: ${row.summary}`,
-    `Status: ${row.status} · ${formatTime(row.created_at)} · ${row.created_by || "-"}`,
-    `WAN: ${status.wan_status || "-"} · ${status.wan_ip || "-"}`,
-    `CPU/RAM/Uptime: ${formatPercent(status.cpu_usage)} · ${formatPercent(status.ram_usage)} · ${formatUptime(status.uptime)}`,
-    `Client: ${result.client_count ?? "-"}`,
-    `Router ping: ${tests.router_ping?.ok ? "OK" : "FAIL"} · ${tests.router_ping?.avg_ms ?? "-"} ms`,
-    `RCI: ${tests.rci?.ok ? "OK" : "FAIL"}`,
-    `Internet ping: ${tests.internet_ping?.ok ? "OK" : "FAIL"} · ${tests.internet_ping?.avg_ms ?? "-"} ms`,
-    `DNS: ${tests.dns?.ok ? "OK" : "FAIL"} · ${(tests.dns?.addresses || []).join(", ") || "-"}`,
-    `Sayt ping: ${tests.site?.ok ? "OK" : "FAIL"} · ${tests.site?.avg_ms ?? "-"} ms`,
-    warnings.length ? `Xəbərdarlıq: ${warnings.join("; ")}` : "Xəbərdarlıq yoxdur",
+    "ÜMUMİ NƏTİCƏ",
+    row.summary,
     "",
+    "STATUS",
+    `Vəziyyət: ${row.status.toUpperCase()} · ${formatTime(row.created_at)} · ${row.created_by || "-"}`,
+    `WAN: ${status.wan_status || "-"} · ${status.wan_ip || "-"}`,
+    `Resurs: CPU ${formatPercent(status.cpu_usage)} · RAM ${formatPercent(status.ram_usage)} · Uptime ${formatUptime(status.uptime)}`,
+    `Client sayı: ${result.client_count ?? "-"}`,
+    "",
+    "TESTLƏR",
+    testLine("Router ping", tests.router_ping),
+    testLine("RCI giriş", tests.rci),
+    testLine("Internet ping", tests.internet_ping),
+    testLine("DNS", tests.dns),
+    testLine("Sayt ping", tests.site),
+    "",
+    "XƏBƏRDARLIQ",
+    warnings.length ? warnings.join("; ") : "Yoxdur",
+    "",
+    "OPERATOR QEYDİ",
     result.operator_script || "",
   ].join("\n");
 }
@@ -1261,7 +1302,7 @@ async function updateClientAccess(mac, blocked) {
     body: JSON.stringify({ mac, blocked }),
   });
   setMessage(`${mac} ${blocked ? t("blocked") : t("opened")}`);
-  await loadDashboard();
+  await loadDashboard({ forceHeavy: true });
 }
 
 async function updateWifiPassword(password) {
@@ -1274,6 +1315,7 @@ async function updateWifiPassword(password) {
   });
   els.wifiPasswordInput.value = "";
   setMessage(t("wifiPasswordChanged"));
+  await loadDashboard({ forceHeavy: true });
 }
 
 async function updateWifiSsid(ssid) {
@@ -1286,7 +1328,7 @@ async function updateWifiSsid(ssid) {
   });
   els.wifiSsidInput.value = "";
   setMessage(t("wifiNameChanged"));
-  await loadDashboard();
+  await loadDashboard({ forceHeavy: true });
 }
 
 async function updateWifiPower(enabled) {
@@ -1298,7 +1340,7 @@ async function updateWifiPower(enabled) {
     body: JSON.stringify({ enabled }),
   });
   setMessage(enabled ? t("wifiTurnedOn") : t("wifiTurnedOff"));
-  await loadDashboard();
+  await loadDashboard({ forceHeavy: true });
 }
 
 async function updatePortPower(interfaceId, enabled) {
@@ -1310,7 +1352,7 @@ async function updatePortPower(interfaceId, enabled) {
     body: JSON.stringify({ enabled }),
   });
   setMessage(enabled ? t("portTurnedOn") : t("portTurnedOff"));
-  await loadDashboard();
+  await loadDashboard({ forceHeavy: true });
 }
 
 async function restartRouter() {
@@ -1342,6 +1384,115 @@ function applyViewPrefs() {
   if (state.viewScale === "compact") document.body.classList.add("viewCompact");
   if (state.viewScale === "comfortable") document.body.classList.add("viewComfortable");
   els.viewScaleSelect.value = state.viewScale;
+}
+
+function panelCards() {
+  return Array.from(document.querySelectorAll("[data-card]"));
+}
+
+function savePanelOrder() {
+  state.panelOrder = panelCards().map((panel) => panel.dataset.card);
+  localStorage.setItem("keenetic-panel-order", JSON.stringify(state.panelOrder));
+}
+
+function applyPanelOrder() {
+  if (!els.dashboardGrid || !Array.isArray(state.panelOrder) || !state.panelOrder.length) return;
+  const cards = new Map(panelCards().map((panel) => [panel.dataset.card, panel]));
+  state.panelOrder.forEach((key) => {
+    const card = cards.get(key);
+    if (card) els.dashboardGrid.appendChild(card);
+  });
+}
+
+function defaultPanelSize(key) {
+  if (["customer", "diagnostics", "status", "traffic", "wifi", "ports"].includes(key)) return "wide";
+  if (key === "blocked") return "full";
+  return "normal";
+}
+
+function panelSizeLabel(size) {
+  if (size === "full") return "Tam";
+  if (size === "wide") return "Geniş";
+  return "Normal";
+}
+
+function savePanelSizes() {
+  localStorage.setItem("keenetic-panel-sizes", JSON.stringify(state.panelSizes));
+}
+
+function applyPanelSizes() {
+  panelCards().forEach((panel) => {
+    const size = state.panelSizes[panel.dataset.card] || defaultPanelSize(panel.dataset.card);
+    panel.classList.toggle("panelWide", size === "wide");
+    panel.classList.toggle("panelFull", size === "full");
+    panel.classList.toggle("panelNormal", size === "normal");
+    const button = panel.querySelector(".panelSizeBtn");
+    if (button) {
+      button.textContent = panelSizeLabel(size);
+      button.title = "Panel ölçüsü: Normal / Geniş / Tam";
+    }
+  });
+}
+
+function cyclePanelSize(panel) {
+  const key = panel.dataset.card;
+  const current = state.panelSizes[key] || defaultPanelSize(key);
+  const next = current === "normal" ? "wide" : current === "wide" ? "full" : "normal";
+  state.panelSizes[key] = next;
+  savePanelSizes();
+  applyPanelSizes();
+}
+
+function initDraggablePanels() {
+  let dragged = null;
+  panelCards().forEach((panel) => {
+    const header = panel.querySelector(".panelHeader");
+    if (!header) return;
+    if (!header.querySelector(".panelSizeBtn")) {
+      const button = document.createElement("button");
+      button.className = "panelSizeBtn";
+      button.type = "button";
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        cyclePanelSize(panel);
+      });
+      header.appendChild(button);
+    }
+    header.draggable = true;
+    header.title = "Tutub sürüşdür";
+    header.addEventListener("dragstart", (event) => {
+      if (event.target.closest("button, input, select, textarea, a")) {
+        event.preventDefault();
+        return;
+      }
+      dragged = panel;
+      panel.classList.add("dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", panel.dataset.card);
+    });
+    header.addEventListener("dragend", () => {
+      panel.classList.remove("dragging");
+      panelCards().forEach((item) => item.classList.remove("dragOver"));
+      dragged = null;
+      savePanelOrder();
+    });
+    panel.addEventListener("dragover", (event) => {
+      if (!dragged || dragged === panel) return;
+      event.preventDefault();
+      panel.classList.add("dragOver");
+      const rect = panel.getBoundingClientRect();
+      const after = event.clientY > rect.top + rect.height / 2;
+      els.dashboardGrid.insertBefore(dragged, after ? panel.nextSibling : panel);
+    });
+    panel.addEventListener("dragleave", () => {
+      panel.classList.remove("dragOver");
+    });
+    panel.addEventListener("drop", (event) => {
+      event.preventDefault();
+      panel.classList.remove("dragOver");
+      savePanelOrder();
+    });
+  });
 }
 
 function renderSparkline(client) {
@@ -1405,7 +1556,7 @@ async function refresh() {
   els.refreshBtn.disabled = true;
   try {
     await loadRouters();
-    await loadDashboard();
+    await loadDashboard({ forceHeavy: true });
   } catch (error) {
     els.subtitle.textContent = error.message;
     renderMetrics(null, null);
@@ -1421,7 +1572,8 @@ async function refresh() {
 els.routerSelect.addEventListener("change", () => {
   state.selectedRouterId = els.routerSelect.value;
   state.previousClients.clear();
-  loadDashboard();
+  state.heavyLoadedAt = 0;
+  loadDashboard({ forceHeavy: true });
 });
 
 els.addSchoolBtn.addEventListener("click", () => openSchoolModal());
@@ -1498,9 +1650,10 @@ els.refreshIdentityBtn.addEventListener("click", () => {
 els.adminRouterSelect.addEventListener("change", () => {
   state.selectedRouterId = els.adminRouterSelect.value;
   state.previousClients.clear();
+  state.heavyLoadedAt = 0;
   renderRouterSelect();
   renderAdminRouter();
-  loadDashboard().catch((error) => {
+  loadDashboard({ forceHeavy: true }).catch((error) => {
     els.osUpdateStatus.textContent = error.message;
   });
 });
@@ -1678,6 +1831,9 @@ els.segments.forEach((button) => {
 });
 
 applyTranslations();
+applyPanelOrder();
+initDraggablePanels();
+applyPanelSizes();
 applyAuthState();
 if (state.auth?.token) refresh();
 setInterval(() => {

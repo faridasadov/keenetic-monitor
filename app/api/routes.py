@@ -558,7 +558,7 @@ def router_summary(router_id: str, db: Session = Depends(get_db)) -> dict[str, o
             select(RouterMetric)
             .where(RouterMetric.router_id == router_id)
             .order_by(RouterMetric.time.desc())
-            .limit(8)
+            .limit(120)
         )
     )
     wan_rx_bps = None
@@ -569,9 +569,16 @@ def router_summary(router_id: str, db: Session = Depends(get_db)) -> dict[str, o
     lan_tx_bps = None
     wifi_rx_bps = None
     wifi_tx_bps = None
+    max_traffic_bps = None
     wan_provider = None
-    for index in range(len(metrics) - 1):
-        current, previous = metrics[index], metrics[index + 1]
+    traffic_samples: list[tuple[RouterMetric, dict[str, dict[str, int | None]]]] = []
+    for metric in metrics:
+        groups = _metric_traffic_groups(metric)
+        if any(value is not None for bucket in groups.values() for value in bucket.values()):
+            traffic_samples.append((metric, groups))
+    for index in range(len(traffic_samples) - 1):
+        current, current_groups = traffic_samples[index]
+        previous, previous_groups = traffic_samples[index + 1]
         seconds = (current.time - previous.time).total_seconds()
         if seconds <= 0:
             continue
@@ -581,16 +588,32 @@ def router_summary(router_id: str, db: Session = Depends(get_db)) -> dict[str, o
         if current.tx_bytes_total is not None and previous.tx_bytes_total is not None:
             delta = current.tx_bytes_total - previous.tx_bytes_total
             wan_tx_bps = (delta * 8) / seconds if delta >= 0 else None
-        current_groups = _metric_traffic_groups(current)
-        previous_groups = _metric_traffic_groups(previous)
-        total_rx_bps = _traffic_bps(current_groups, previous_groups, "total", "rx_bytes", seconds)
-        total_tx_bps = _traffic_bps(current_groups, previous_groups, "total", "tx_bytes", seconds)
-        lan_rx_bps = _traffic_bps(current_groups, previous_groups, "lan", "rx_bytes", seconds)
-        lan_tx_bps = _traffic_bps(current_groups, previous_groups, "lan", "tx_bytes", seconds)
-        wifi_rx_bps = _traffic_bps(current_groups, previous_groups, "wifi", "rx_bytes", seconds)
-        wifi_tx_bps = _traffic_bps(current_groups, previous_groups, "wifi", "tx_bytes", seconds)
-        if any(value is not None for value in (lan_rx_bps, lan_tx_bps, wifi_rx_bps, wifi_tx_bps)):
-            break
+        sample_total_rx = _traffic_bps(current_groups, previous_groups, "total", "rx_bytes", seconds)
+        sample_total_tx = _traffic_bps(current_groups, previous_groups, "total", "tx_bytes", seconds)
+        sample_lan_rx = _traffic_bps(current_groups, previous_groups, "lan", "rx_bytes", seconds)
+        sample_lan_tx = _traffic_bps(current_groups, previous_groups, "lan", "tx_bytes", seconds)
+        sample_wifi_rx = _traffic_bps(current_groups, previous_groups, "wifi", "rx_bytes", seconds)
+        sample_wifi_tx = _traffic_bps(current_groups, previous_groups, "wifi", "tx_bytes", seconds)
+        sample_peak = sum(value or 0 for value in (sample_total_rx, sample_total_tx))
+        if sample_peak > 0:
+            max_traffic_bps = max(max_traffic_bps or 0, sample_peak)
+        if total_rx_bps is None and total_tx_bps is None and any(
+            value is not None
+            for value in (sample_total_rx, sample_total_tx, sample_lan_rx, sample_lan_tx, sample_wifi_rx, sample_wifi_tx)
+        ):
+            total_rx_bps = sample_total_rx
+            total_tx_bps = sample_total_tx
+            lan_rx_bps = sample_lan_rx
+            lan_tx_bps = sample_lan_tx
+            wifi_rx_bps = sample_wifi_rx
+            wifi_tx_bps = sample_wifi_tx
+    max_client_count = db.scalar(
+        select(func.count(ClientMetric.client_key))
+        .where(ClientMetric.router_id == router_id)
+        .group_by(ClientMetric.time)
+        .order_by(func.count(ClientMetric.client_key).desc())
+        .limit(1)
+    )
     if metrics:
         raw = metrics[0].raw or {}
         if isinstance(raw, dict):
@@ -610,6 +633,8 @@ def router_summary(router_id: str, db: Session = Depends(get_db)) -> dict[str, o
         "lan_tx_bps": lan_tx_bps,
         "wifi_rx_bps": wifi_rx_bps,
         "wifi_tx_bps": wifi_tx_bps,
+        "max_traffic_bps": max_traffic_bps,
+        "max_client_count": max(max_client_count or 0, client_count),
     }
 
 

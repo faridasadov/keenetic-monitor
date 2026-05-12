@@ -22,19 +22,16 @@ class PollScheduler:
     def __init__(self) -> None:
         self.settings = get_settings()
         self._stop = asyncio.Event()
+        self._poll_lock = asyncio.Lock()
         self._realtime_clients: dict[str, tuple[str, KeeneticClient]] = {}
 
     async def run(self) -> None:
-        interval = max(
-            min(
-                self.settings.router_poll_wan_seconds,
-                self.settings.router_poll_clients_seconds,
-                self.settings.router_poll_traffic_seconds,
-                self.settings.router_poll_system_seconds,
-            ),
-            1,
-        )
-        tasks = [asyncio.create_task(self._loop("realtime", interval, self.poll_all))]
+        tasks = [
+            asyncio.create_task(self._loop("wan", self.settings.router_poll_wan_seconds, self.poll_wan)),
+            asyncio.create_task(self._loop("traffic", self.settings.router_poll_traffic_seconds, self.poll_traffic)),
+            asyncio.create_task(self._loop("system", self.settings.router_poll_system_seconds, self.poll_system)),
+            asyncio.create_task(self._loop("clients", self.settings.router_poll_clients_seconds, self.poll_clients)),
+        ]
         await self._stop.wait()
         for task in tasks:
             task.cancel()
@@ -46,21 +43,23 @@ class PollScheduler:
         self._realtime_clients.clear()
 
     async def _loop(self, name: str, interval: int, func) -> None:
+        interval = max(interval, 1)
         while not self._stop.is_set():
             try:
-                await asyncio.to_thread(func)
+                async with self._poll_lock:
+                    await asyncio.to_thread(func)
             except Exception:
                 logger.exception("Collector loop failed", extra={"loop": name})
             await asyncio.sleep(interval)
 
     def poll_wan(self) -> None:
-        self._poll_metrics(include_system=False, include_interfaces=True)
+        self._poll_metrics(include_system=True, include_interfaces=False, include_version=False)
 
     def poll_traffic(self) -> None:
-        self._poll_metrics(include_system=False, include_interfaces=True)
+        self._poll_metrics(include_system=False, include_interfaces=True, include_version=False)
 
     def poll_system(self) -> None:
-        self._poll_metrics(include_system=True, include_interfaces=True)
+        self._poll_metrics(include_system=True, include_interfaces=False, include_version=True)
 
     def poll_clients(self) -> None:
         with SessionLocal() as db:
@@ -80,8 +79,8 @@ class PollScheduler:
                     db.add_all(CurrentClient(**row) for row in rows)
                     self._mark_success(db, router.id)
                     db.commit()
-                except Exception:
-                    logger.exception("Client poll failed", extra={"router_id": router.id, "host": router.host})
+                except Exception as exc:
+                    self._log_poll_failure("Client poll failed", router, exc)
                     self._mark_failure(db, router)
                     db.commit()
 
@@ -117,7 +116,7 @@ class PollScheduler:
                     self._mark_failure(db, router)
                     db.commit()
 
-    def _poll_metrics(self, *, include_system: bool, include_interfaces: bool) -> None:
+    def _poll_metrics(self, *, include_system: bool, include_interfaces: bool, include_version: bool) -> None:
         with SessionLocal() as db:
             for router in self._enabled_routers(db):
                 password = decrypt_secret(router.password_encrypted)
@@ -129,20 +128,22 @@ class PollScheduler:
                     version = None
                     interfaces = None
                     interface_stats = None
-                    with self._client(router, password) as client:
-                        if include_system:
-                            system = client.get_system_info()
-                            version = self._version_info(client)
-                        if include_interfaces:
-                            interfaces = client.get_interfaces()
-                        interface_stats = self._interface_stats(client, interfaces) if interfaces is not None else None
+                    client = self._realtime_client(router, password)
+                    if include_system:
+                        system = client.get_system_info()
+                    if include_version:
+                        version = self._version_info(client)
+                    if include_interfaces:
+                        interfaces = client.get_interfaces()
+                    interface_stats = self._interface_stats(client, interfaces) if interfaces is not None else None
                     metric = parse_router_metric(router.id, system=system, interfaces=interfaces, interface_stats=interface_stats)
                     self._write_metric(db, metric)
                     self._mark_success(db, router.id)
                     self._write_router_identity(router, system, version)
                     db.commit()
-                except Exception:
-                    logger.exception("Metric poll failed", extra={"router_id": router.id, "host": router.host})
+                except Exception as exc:
+                    self._close_realtime_client(router.id)
+                    self._log_poll_failure("Metric poll failed", router, exc)
                     self._mark_failure(db, router)
                     db.commit()
 
@@ -177,7 +178,7 @@ class PollScheduler:
     @staticmethod
     def _log_poll_failure(message: str, router: Router, exc: Exception) -> None:
         if isinstance(exc, TimeoutError) or "timed out" in str(exc).lower():
-            logger.warning("%s: %s", message, exc, extra={"router_id": router.id, "host": router.host})
+            logger.warning("%s for %s: %s", message, router.host, exc, extra={"router_id": router.id, "host": router.host})
             return
         logger.exception(message, extra={"router_id": router.id, "host": router.host})
 
@@ -213,9 +214,24 @@ class PollScheduler:
             or router.firmware_version
         )
 
-    @staticmethod
-    def _enabled_routers(db: Session) -> list[Router]:
-        return list(db.scalars(select(Router).where(Router.enabled.is_(True))))
+    def _enabled_routers(self, db: Session) -> list[Router]:
+        now = datetime.now(timezone.utc)
+        routers = list(db.scalars(select(Router).where(Router.enabled.is_(True))))
+        ready: list[Router] = []
+        for router in routers:
+            if router.failure_count < self.settings.router_offline_after_failures:
+                ready.append(router)
+                continue
+            status = db.get(RouterStatus, router.id)
+            if not status or status.online:
+                ready.append(router)
+                continue
+            updated_at = status.updated_at
+            if updated_at.tzinfo is None:
+                updated_at = updated_at.replace(tzinfo=timezone.utc)
+            if (now - updated_at).total_seconds() >= 60:
+                ready.append(router)
+        return ready
 
     @staticmethod
     def _write_metric(db: Session, metric) -> None:

@@ -322,6 +322,8 @@ class SummaryRead(BaseModel):
     lan_tx_bps: float | None = None
     wifi_rx_bps: float | None = None
     wifi_tx_bps: float | None = None
+    max_traffic_bps: float | None = None
+    max_client_count: int | None = None
 
 
 class ClientAccessUpdate(BaseModel):

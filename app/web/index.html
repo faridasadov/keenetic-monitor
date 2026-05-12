@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Keenetic Monitor</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260510-admin-router-edit" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260512-panel-size" />
   </head>
   <body>
     <header class="topbar">
@@ -23,7 +23,7 @@
           <option value="en">EN</option>
         </select>
         <select id="routerSelect" aria-label="Router seç"></select>
-        <button id="addSchoolBtn" class="allowBtn adminOnly" type="button" data-i18n="addSchool">Məktəb əlavə et</button>
+        <button id="addSchoolBtn" class="allowBtn adminOnly topActionBtn" type="button" data-i18n="addSchool">Yeni məktəb</button>
         <button id="pingBtn" type="button">Routerdən ping</button>
         <button id="siteCheckBtn" type="button">Routerdən sayt ping</button>
         <button id="adminPanelBtn" class="adminOnly userBadge" type="button">Admin panel</button>
@@ -210,7 +210,7 @@
       <form id="schoolForm" class="modalPanel">
         <div class="modalHeader">
           <div>
-            <h2 id="schoolModalTitle" data-i18n="addSchool">Məktəb əlavə et</h2>
+            <h2 id="schoolModalTitle" data-i18n="addSchool">Yeni məktəb</h2>
             <p data-i18n="addSchoolHint">Router məlumatlarını yaz, əvvəl test et, sonra təsdiqlə.</p>
           </div>
           <button id="schoolModalClose" class="iconBtn" type="button" aria-label="Bağla">×</button>
@@ -314,8 +314,8 @@
       </section>
       <div id="alertBar" class="alertBar hidden"></div>
 
-      <section class="supportDeskGrid">
-        <section class="panel supportCard">
+      <section id="dashboardGrid" class="dashboardGrid">
+        <section class="panel supportCard" data-card="customer">
           <div class="panelHeader">
             <h2>Müştəri kartı</h2>
             <span id="supportStatusBadge" class="supportStatusBadge">-</span>
@@ -328,17 +328,14 @@
           </div>
         </section>
 
-        <section class="panel supportCard">
+        <section class="panel supportCard" data-card="diagnostics">
           <div class="panelHeader">
             <h2>Bir klik diaqnostika</h2>
             <button id="diagnoseBtn" type="button">Diaqnostika et</button>
           </div>
           <pre id="diagnosticResult" class="supportLog">Diaqnostika nəticəsi burada görünəcək.</pre>
         </section>
-      </section>
-
-      <section class="overviewGrid" aria-label="Router status" data-i18n-aria="routerStatus">
-        <section class="panel statusPanel" data-panel="status">
+        <section class="panel statusPanel" data-panel="status" data-card="status">
           <div class="panelHeader">
             <h2 data-i18n="routerStatus">Router status</h2>
           </div>
@@ -366,11 +363,15 @@
           </div>
         </section>
 
-        <section class="panel trafficPanel" data-panel="traffic">
+        <section class="panel trafficPanel" data-panel="traffic" data-card="traffic">
           <div class="panelHeader">
             <h2 data-i18n="traffic">Trafik</h2>
           </div>
           <div class="trafficGrid">
+            <article class="trafficCard primaryTraffic">
+              <span>Ümumi canlı trafik</span>
+              <strong id="totalTrafficValue">-</strong>
+            </article>
             <article class="trafficCard">
               <span data-i18n="lanTraffic">LAN trafik</span>
               <strong id="lanTrafficValue">-</strong>
@@ -379,12 +380,17 @@
               <span data-i18n="wifiTraffic">Wi-Fi trafik</span>
               <strong id="wifiTrafficValue">-</strong>
             </article>
+            <article class="trafficCard highlightTraffic">
+              <span>Maks trafik</span>
+              <strong id="maxTrafficValue">-</strong>
+            </article>
+            <article class="trafficCard highlightTraffic">
+              <span>Maks client</span>
+              <strong id="maxClientValue">-</strong>
+            </article>
           </div>
         </section>
-      </section>
-
-      <section class="controlsGrid" aria-label="Router idarəsi" data-i18n-aria="routerControls">
-        <form id="wifiForm" class="panel controlPanel" data-panel="wifi">
+        <form id="wifiForm" class="panel controlPanel" data-panel="wifi" data-card="wifi">
           <div class="panelHeader">
             <h2>Wi-Fi</h2>
           </div>
@@ -406,7 +412,7 @@
           <p id="actionMessage" class="message"></p>
         </form>
 
-        <section class="panel controlPanel" data-panel="ports">
+        <section class="panel controlPanel" data-panel="ports" data-card="ports">
           <div class="panelHeader">
             <h2 data-i18n="ports">Portlar</h2>
             <button id="restartBtn" class="dangerBtn adminOnly" type="button" data-i18n="restartRouter">Router restart</button>
@@ -415,15 +421,14 @@
             <span class="muted" data-i18n="loading">Yüklənir</span>
           </div>
         </section>
-      </section>
-
-      <section class="panel blockedPanel" data-panel="blocked">
-        <div class="panelHeader">
-          <h2 data-i18n="blockedDevices">Bloklanmış avadanlıqlar</h2>
-        </div>
-        <div id="blockedList" class="blockedList">
-          <span class="muted" data-i18n="loading">Yüklənir</span>
-        </div>
+        <section class="panel blockedPanel" data-panel="blocked" data-card="blocked">
+          <div class="panelHeader">
+            <h2 data-i18n="blockedDevices">Bloklanmış avadanlıqlar</h2>
+          </div>
+          <div id="blockedList" class="blockedList">
+            <span class="muted" data-i18n="loading">Yüklənir</span>
+          </div>
+        </section>
       </section>
 
       <section class="toolbar" aria-label="Client filterləri" data-i18n-aria="clientFilters">
@@ -463,6 +468,6 @@
       </section>
     </main>
 
-    <script src="/static/script.js?v=20260510-admin-router-edit"></script>
+    <script src="/static/script.js?v=20260512-panel-size"></script>
   </body>
 </html>
