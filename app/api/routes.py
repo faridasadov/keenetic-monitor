@@ -553,12 +553,20 @@ def router_summary(router_id: str, db: Session = Depends(get_db)) -> dict[str, o
     if status_row is None:
         raise HTTPException(status_code=404, detail="Router status not found")
     client_count = db.scalar(select(func.count()).select_from(CurrentClient).where(CurrentClient.router_id == router_id)) or 0
+    day_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     metrics = list(
         db.scalars(
             select(RouterMetric)
             .where(RouterMetric.router_id == router_id)
             .order_by(RouterMetric.time.desc())
             .limit(120)
+        )
+    )
+    daily_metrics = list(
+        db.scalars(
+            select(RouterMetric)
+            .where(RouterMetric.router_id == router_id, RouterMetric.time >= day_start)
+            .order_by(RouterMetric.time.desc())
         )
     )
     wan_rx_bps = None
@@ -595,8 +603,6 @@ def router_summary(router_id: str, db: Session = Depends(get_db)) -> dict[str, o
         sample_wifi_rx = _traffic_bps(current_groups, previous_groups, "wifi", "rx_bytes", seconds)
         sample_wifi_tx = _traffic_bps(current_groups, previous_groups, "wifi", "tx_bytes", seconds)
         sample_peak = sum(value or 0 for value in (sample_total_rx, sample_total_tx))
-        if sample_peak > 0:
-            max_traffic_bps = max(max_traffic_bps or 0, sample_peak)
         if total_rx_bps is None and total_tx_bps is None and any(
             value is not None
             for value in (sample_total_rx, sample_total_tx, sample_lan_rx, sample_lan_tx, sample_wifi_rx, sample_wifi_tx)
@@ -607,6 +613,7 @@ def router_summary(router_id: str, db: Session = Depends(get_db)) -> dict[str, o
             lan_tx_bps = sample_lan_tx
             wifi_rx_bps = sample_wifi_rx
             wifi_tx_bps = sample_wifi_tx
+    max_traffic_bps = _max_total_traffic_bps(daily_metrics)
     max_client_count = db.scalar(
         select(func.count(ClientMetric.client_key))
         .where(ClientMetric.router_id == router_id)
@@ -1216,3 +1223,24 @@ def _traffic_bps(
         return None
     delta = current_value - previous_value
     return (delta * 8) / seconds if delta >= 0 else None
+
+
+def _max_total_traffic_bps(metrics: list[RouterMetric]) -> float | None:
+    samples: list[tuple[RouterMetric, dict[str, dict[str, int | None]]]] = []
+    for metric in metrics:
+        groups = _metric_traffic_groups(metric)
+        if any(value is not None for bucket in groups.values() for value in bucket.values()):
+            samples.append((metric, groups))
+    peak = None
+    for index in range(len(samples) - 1):
+        current, current_groups = samples[index]
+        previous, previous_groups = samples[index + 1]
+        seconds = (current.time - previous.time).total_seconds()
+        if seconds <= 0:
+            continue
+        rx_bps = _traffic_bps(current_groups, previous_groups, "total", "rx_bytes", seconds)
+        tx_bps = _traffic_bps(current_groups, previous_groups, "total", "tx_bytes", seconds)
+        total = sum(value or 0 for value in (rx_bps, tx_bps))
+        if total > 0:
+            peak = max(peak or 0, total)
+    return peak

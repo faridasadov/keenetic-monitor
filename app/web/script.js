@@ -1106,13 +1106,28 @@ function renderMetrics(status, summary) {
   els.statusValue.style.color = status?.online ? "var(--accent)" : "var(--bad)";
   els.clientCount.textContent = String(summary?.client_count ?? state.clients.length);
   els.cpuValue.textContent = formatPercent(status?.cpu_usage);
+  setLoadClass(els.cpuValue, status?.cpu_usage);
   els.ramValue.textContent = formatPercent(status?.ram_usage);
+  setLoadClass(els.ramValue, status?.ram_usage);
   els.uptimeValue.textContent = formatUptime(status?.uptime);
   els.totalTrafficValue.innerHTML = formatTrafficPair(summary?.total_rx_bps, summary?.total_tx_bps);
   els.lanTrafficValue.innerHTML = formatTrafficPair(summary?.lan_rx_bps, summary?.lan_tx_bps);
   els.wifiTrafficValue.innerHTML = formatTrafficPair(summary?.wifi_rx_bps, summary?.wifi_tx_bps);
   els.maxTrafficValue.textContent = formatBits(summary?.max_traffic_bps);
   els.maxClientValue.textContent = String(summary?.max_client_count ?? summary?.client_count ?? state.clients.length);
+}
+
+function setLoadClass(element, value) {
+  element.classList.remove("loadNormal", "loadWarning", "loadCritical");
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return;
+  const numeric = Number(value);
+  if (numeric >= 85) {
+    element.classList.add("loadCritical");
+  } else if (numeric >= 70) {
+    element.classList.add("loadWarning");
+  } else {
+    element.classList.add("loadNormal");
+  }
 }
 
 function renderSupportPanel() {

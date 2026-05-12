@@ -848,6 +848,18 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.metric strong.loadNormal {
+  color: var(--accent);
+}
+
+.metric strong.loadWarning {
+  color: var(--warn);
+}
+
+.metric strong.loadCritical {
+  color: var(--bad);
+}
+
 .trafficGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
