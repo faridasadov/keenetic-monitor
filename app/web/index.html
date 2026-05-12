@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Keenetic Monitor</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260512-panel-size" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260512-client-alerts" />
   </head>
   <body>
     <header class="topbar">
@@ -25,6 +25,7 @@
         <select id="routerSelect" aria-label="Router seç"></select>
         <button id="addSchoolBtn" class="allowBtn adminOnly topActionBtn" type="button" data-i18n="addSchool">Yeni məktəb</button>
         <button id="pingBtn" type="button">Routerdən ping</button>
+        <button id="restartBtn" class="dangerBtn adminOnly" type="button" data-i18n="restartRouter">Router restart</button>
         <button id="siteCheckBtn" type="button">Routerdən sayt ping</button>
         <button id="adminPanelBtn" class="adminOnly userBadge" type="button">Admin panel</button>
         <span id="userBadge" class="userBadge userOnly">-</span>
@@ -415,7 +416,6 @@
         <section class="panel controlPanel" data-panel="ports" data-card="ports">
           <div class="panelHeader">
             <h2 data-i18n="ports">Portlar</h2>
-            <button id="restartBtn" class="dangerBtn adminOnly" type="button" data-i18n="restartRouter">Router restart</button>
           </div>
           <div id="portsList" class="portsList">
             <span class="muted" data-i18n="loading">Yüklənir</span>
@@ -468,6 +468,6 @@
       </section>
     </main>
 
-    <script src="/static/script.js?v=20260512-panel-size"></script>
+    <script src="/static/script.js?v=20260512-client-alerts"></script>
   </body>
 </html>

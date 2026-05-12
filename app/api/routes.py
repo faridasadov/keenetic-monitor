@@ -466,6 +466,14 @@ def diagnose_router(
         raise HTTPException(status_code=404, detail="Router not found")
     status_row = db.get(RouterStatus, router_id)
     client_count = db.scalar(select(func.count()).select_from(CurrentClient).where(CurrentClient.router_id == router_id)) or 0
+    wifi_client_count = (
+        db.scalar(
+            select(func.count())
+            .select_from(CurrentClient)
+            .where(CurrentClient.router_id == router_id, CurrentClient.connection_type == "wifi")
+        )
+        or 0
+    )
     router_ping_result = _run_ping(router_item.host, 3)
     dns_result = _run_dns_check("google.com")
     item, password = _router_credentials(router_id, db)
@@ -495,6 +503,10 @@ def diagnose_router(
         warnings.append("RAM yüksəkdir")
     if status_row and status_row.uptime is not None and status_row.uptime < 600:
         warnings.append("Router yaxınlarda restart olub")
+    if client_count > 150:
+        warnings.append(f"Client sayı yüksəkdir: {client_count}/150")
+    if wifi_client_count > 15:
+        warnings.append(f"Wi-Fi client sayı yüksəkdir: {wifi_client_count}/15")
 
     if not router_ping_result.get("ok"):
         verdict = "Router və ya VPN/routing əlçatmazdır"
@@ -524,6 +536,7 @@ def diagnose_router(
             "last_seen": status_row.last_seen.isoformat() if status_row and status_row.last_seen else None,
         },
         "client_count": client_count,
+        "wifi_client_count": wifi_client_count,
         "tests": {
             "router_ping": router_ping_result,
             "rci": rci_result,
@@ -553,6 +566,14 @@ def router_summary(router_id: str, db: Session = Depends(get_db)) -> dict[str, o
     if status_row is None:
         raise HTTPException(status_code=404, detail="Router status not found")
     client_count = db.scalar(select(func.count()).select_from(CurrentClient).where(CurrentClient.router_id == router_id)) or 0
+    wifi_client_count = (
+        db.scalar(
+            select(func.count())
+            .select_from(CurrentClient)
+            .where(CurrentClient.router_id == router_id, CurrentClient.connection_type == "wifi")
+        )
+        or 0
+    )
     day_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     metrics = list(
         db.scalars(
@@ -628,6 +649,7 @@ def router_summary(router_id: str, db: Session = Depends(get_db)) -> dict[str, o
     return {
         "router_id": router_id,
         "client_count": client_count,
+        "wifi_client_count": wifi_client_count,
         "online": status_row.online,
         "wan_status": status_row.wan_status,
         "wan_ip": status_row.wan_ip,

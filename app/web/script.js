@@ -1048,9 +1048,11 @@ async function loadDashboard(options = {}) {
 }
 
 function renderAlerts() {
-  const wifiCount = state.clients.filter((client) => client.connection_type === "wifi").length;
+  const totalCount = state.summary?.client_count ?? state.clients.length;
+  const wifiCount = state.summary?.wifi_client_count ?? state.clients.filter((client) => client.connection_type === "wifi").length;
   const alerts = [];
-  if (wifiCount > 20) alerts.push(`Wi-Fi client sayı ${wifiCount}-dir. Limit 20-ni keçib.`);
+  if (totalCount > 150) alerts.push(`Client sayı ${totalCount}-dir. Limit 150-ni keçib.`);
+  if (wifiCount > 15) alerts.push(`Wi-Fi client sayı ${wifiCount}-dir. Limit 15-i keçib.`);
   if (!alerts.length) {
     els.alertBar.classList.add("hidden");
     els.alertBar.textContent = "";
@@ -1104,7 +1106,10 @@ function renderMetrics(status, summary) {
   els.routerDescriptionText.title = router?.description || "";
   els.statusValue.textContent = status?.online ? "Online" : "Offline";
   els.statusValue.style.color = status?.online ? "var(--accent)" : "var(--bad)";
-  els.clientCount.textContent = String(summary?.client_count ?? state.clients.length);
+  const clientCount = summary?.client_count ?? state.clients.length;
+  const wifiClientCount = summary?.wifi_client_count ?? state.clients.filter((client) => client.connection_type === "wifi").length;
+  els.clientCount.textContent = String(clientCount);
+  els.clientCount.classList.toggle("loadCritical", clientCount > 150 || wifiClientCount > 15);
   els.cpuValue.textContent = formatPercent(status?.cpu_usage);
   setLoadClass(els.cpuValue, status?.cpu_usage);
   els.ramValue.textContent = formatPercent(status?.ram_usage);
@@ -1165,7 +1170,7 @@ function formatDiagnostic(row) {
     `Vəziyyət: ${row.status.toUpperCase()} · ${formatTime(row.created_at)} · ${row.created_by || "-"}`,
     `WAN: ${status.wan_status || "-"} · ${status.wan_ip || "-"}`,
     `Resurs: CPU ${formatPercent(status.cpu_usage)} · RAM ${formatPercent(status.ram_usage)} · Uptime ${formatUptime(status.uptime)}`,
-    `Client sayı: ${result.client_count ?? "-"}`,
+    `Client sayı: ${result.client_count ?? "-"} · Wi-Fi ${result.wifi_client_count ?? "-"}`,
     "",
     "TESTLƏR",
     testLine("Router ping", tests.router_ping),

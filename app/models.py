@@ -310,6 +310,7 @@ class PortRead(BaseModel):
 class SummaryRead(BaseModel):
     router_id: str
     client_count: int
+    wifi_client_count: int = 0
     online: bool
     wan_status: str | None
     wan_ip: str | None
