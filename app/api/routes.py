@@ -13,6 +13,7 @@ import telnetlib
 import time
 from datetime import timedelta, timezone
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
@@ -635,7 +636,7 @@ def router_summary(router_id: str, db: Session = Depends(get_db)) -> dict[str, o
         )
         or 0
     )
-    day_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start = _baku_day_start_utc()
     metrics = list(
         db.scalars(
             select(RouterMetric)
@@ -1238,10 +1239,11 @@ def _public_ip_status() -> dict[str, object]:
             message = str(exc)
 
     hits = _dns_blacklist_hits(public_ip) if public_ip else []
+    blacklisted = len(hits) > 0 if public_ip else None
     result = {
         "public_ip": public_ip,
         "public_ip_source": source or message or "unavailable",
-        "public_ip_blacklisted": bool(hits) if public_ip else None,
+        "public_ip_blacklisted": blacklisted,
         "public_ip_blacklist_hits": hits,
         "public_ip_blacklist_checked": list(_DNS_BLACKLISTS) if public_ip else [],
         "public_ip_checked_at": checked_at,
@@ -1455,3 +1457,8 @@ def _max_total_traffic_bps(metrics: list[RouterMetric]) -> float | None:
         if total > 0:
             peak = max(peak or 0, total)
     return peak
+
+
+def _baku_day_start_utc():
+    baku_now = utcnow().astimezone(ZoneInfo("Asia/Baku"))
+    return baku_now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)

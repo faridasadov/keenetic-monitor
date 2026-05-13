@@ -1198,6 +1198,7 @@ function formatDiagnostic(row) {
   const tests = result.tests || {};
   const status = result.status || {};
   const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+  const blacklist = normalizeBlacklistTest(status, tests.public_ip_blacklist);
   const testLine = (label, test, detail = "") => {
     const state = test?.ok ? "OK" : "FAIL";
     const latency = test?.avg_ms === undefined || test?.avg_ms === null ? "" : ` · ${test.avg_ms} ms`;
@@ -1221,8 +1222,9 @@ function formatDiagnostic(row) {
     testLine("Internet ping", tests.internet_ping),
     testLine("DNS", tests.dns),
     testLine("Sayt ping", tests.site),
-    `Public blacklist  ${tests.public_ip_blacklist?.blacklisted ? "FAIL" : "OK"} · ${tests.public_ip_blacklist?.public_ip || "-"}`,
-    `Yoxlanan listlər  ${(tests.public_ip_blacklist?.checked || []).length || "-"} DNSBL`,
+    `Public blacklist  ${blacklist.label} · ${blacklist.publicIp || "-"}`,
+    `Blacklist hitləri ${blacklist.hits.length ? blacklist.hits.join("; ") : "-"}`,
+    `Yoxlanan listlər  ${blacklist.checkedCount || "-"} DNSBL`,
     "",
     "XƏBƏRDARLIQ",
     warnings.length ? warnings.join("; ") : "Yoxdur",
@@ -1233,10 +1235,32 @@ function formatDiagnostic(row) {
 }
 
 function formatDiagnosticBlacklist(status) {
-  if (!status?.public_ip) return "-";
-  if (status.public_ip_blacklisted) return `listdədir (${(status.public_ip_blacklist_hits || []).join(", ") || "naməlum"})`;
-  if (status.public_ip_blacklisted === false) return "təmiz";
+  const blacklist = normalizeBlacklistTest(status, null);
+  if (!blacklist.publicIp) return "-";
+  if (blacklist.listed) return `listdədir (${blacklist.hits.join(", ") || "naməlum"})`;
+  if (blacklist.clean) return "təmiz";
   return "yoxlanmadı";
+}
+
+function normalizeBlacklistTest(status = {}, test = {}) {
+  const hits = [
+    ...new Set([
+      ...(Array.isArray(status?.public_ip_blacklist_hits) ? status.public_ip_blacklist_hits : []),
+      ...(Array.isArray(test?.hits) ? test.hits : []),
+    ]),
+  ];
+  const publicIp = status?.public_ip || test?.public_ip || "";
+  const checkedCount = (Array.isArray(test?.checked) ? test.checked : status?.public_ip_blacklist_checked || []).length;
+  const listed = status?.public_ip_blacklisted === true || test?.blacklisted === true || test?.ok === false || hits.length > 0;
+  const clean = status?.public_ip_blacklisted === false || test?.blacklisted === false || test?.ok === true;
+  return {
+    publicIp,
+    hits,
+    checkedCount,
+    listed,
+    clean: clean && !listed,
+    label: listed ? "FAIL" : clean ? "OK" : "YOXLANMADI",
+  };
 }
 
 async function runOneClickDiagnostic() {

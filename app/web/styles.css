@@ -16,8 +16,11 @@
   --warn: #b45309;
   --bad: #b42318;
   --bad-soft: #fee4e2;
-  --shadow: 0 10px 30px rgba(16, 24, 40, 0.08);
-  --shadow-soft: 0 1px 3px rgba(16, 24, 40, 0.06);
+  --glass: rgba(255, 255, 255, 0.72);
+  --shine: rgba(255, 255, 255, 0.56);
+  --shadow: 0 16px 42px rgba(16, 24, 40, 0.1);
+  --shadow-soft: 0 8px 22px rgba(16, 24, 40, 0.08);
+  --shadow-lift: 0 22px 56px rgba(15, 23, 42, 0.16);
 }
 
 * {
@@ -28,7 +31,9 @@ body {
   margin: 0;
   min-width: 320px;
   background:
-    linear-gradient(180deg, #eef6f7 0, #f5f7fa 250px),
+    radial-gradient(circle at 18% -8%, rgba(19, 111, 99, 0.16), transparent 34%),
+    radial-gradient(circle at 88% 2%, rgba(37, 84, 166, 0.16), transparent 30%),
+    linear-gradient(180deg, #edf7f5 0, #f5f7fa 285px),
     var(--bg);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -50,6 +55,16 @@ body {
   }
 }
 
+@keyframes softPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(19, 111, 99, 0.18); }
+  50% { box-shadow: 0 0 0 5px rgba(19, 111, 99, 0.04); }
+}
+
+@keyframes criticalPulse {
+  0%, 100% { text-shadow: 0 0 0 rgba(180, 35, 24, 0); }
+  50% { text-shadow: 0 0 12px rgba(180, 35, 24, 0.28); }
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -57,8 +72,12 @@ body {
   gap: 18px;
   padding: 20px 28px;
   border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04), 0 16px 40px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(18px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 h1,
@@ -118,6 +137,11 @@ textarea {
   background: #fff;
   color: var(--text);
   font: inherit;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease,
+    background-color 150ms ease;
 }
 
 button,
@@ -152,6 +176,14 @@ input,
 textarea {
   width: 100%;
   padding: 0 12px;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: rgba(19, 111, 99, 0.55);
+  box-shadow: 0 0 0 4px rgba(19, 111, 99, 0.11);
 }
 
 textarea {
@@ -241,6 +273,7 @@ body[data-role="admin"] .userOnly {
   grid-template-columns: repeat(12, minmax(0, 1fr));
   align-items: start;
   margin-bottom: 16px;
+  gap: 14px;
 }
 
 .supportCard {
@@ -276,6 +309,7 @@ body[data-role="admin"] .userOnly {
   color: var(--blue);
   font-size: 12px;
   font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .supportStatusBadge.warning,
@@ -287,6 +321,7 @@ body[data-role="admin"] .userOnly {
 .supportStatusBadge.critical {
   background: var(--bad-soft);
   color: var(--bad);
+  animation: criticalPulse 1.7s ease-in-out infinite;
 }
 
 .supportStatusBadge.ok,
@@ -544,10 +579,11 @@ body[data-role="admin"] .userOnly {
   flex-wrap: nowrap;
   margin-bottom: 14px;
   padding: 10px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(220, 227, 237, 0.78);
   border-radius: 8px;
-  background: var(--panel);
+  background: rgba(255, 255, 255, 0.76);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
 }
 
 .viewGroup strong {
@@ -594,8 +630,8 @@ body[data-role="admin"] .userOnly {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(5px);
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(12px);
   animation: overlayFade 140ms ease-out;
 }
 
@@ -608,8 +644,10 @@ body[data-role="admin"] .userOnly {
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--panel);
-  box-shadow: 0 24px 60px rgba(16, 24, 40, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 251, 253, 0.98)),
+    var(--panel);
+  box-shadow: 0 28px 70px rgba(16, 24, 40, 0.24);
   animation: panelRise 180ms ease-out;
 }
 
@@ -676,14 +714,32 @@ button:disabled {
 }
 
 .panel {
-  border: 1px solid var(--line);
+  position: relative;
+  border: 1px solid rgba(220, 227, 237, 0.78);
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow);
+  isolation: isolate;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
     transform 160ms ease;
+}
+
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.74), transparent 42%);
+  pointer-events: none;
+}
+
+.panel:hover {
+  border-color: rgba(148, 163, 184, 0.72);
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-2px);
 }
 
 .supportCard,
@@ -712,13 +768,13 @@ button:disabled {
 
 .supportCard:nth-of-type(1) {
   background:
-    linear-gradient(135deg, rgba(223, 244, 239, 0.88), rgba(255, 255, 255, 0.98)),
+    linear-gradient(135deg, rgba(223, 244, 239, 0.92), rgba(255, 255, 255, 0.98) 64%),
     var(--panel);
 }
 
 .supportCard:nth-of-type(2) {
   background:
-    linear-gradient(135deg, rgba(232, 240, 255, 0.9), rgba(255, 255, 255, 0.98)),
+    linear-gradient(135deg, rgba(232, 240, 255, 0.94), rgba(255, 255, 255, 0.98) 64%),
     var(--panel);
 }
 
@@ -748,6 +804,7 @@ button:disabled {
 .panel.dragOver {
   border-color: var(--accent);
   box-shadow: 0 18px 45px rgba(19, 111, 99, 0.18);
+  animation: softPulse 900ms ease-in-out infinite;
 }
 
 .statusPanel,
@@ -758,7 +815,7 @@ button:disabled {
 
 .trafficPanel {
   background:
-    linear-gradient(135deg, rgba(223, 244, 239, 0.96), rgba(255, 255, 255, 0.98) 42%, rgba(232, 240, 255, 0.92)),
+    linear-gradient(135deg, rgba(223, 244, 239, 0.98), rgba(255, 255, 255, 0.98) 42%, rgba(232, 240, 255, 0.95)),
     var(--panel);
 }
 
@@ -834,14 +891,29 @@ button:disabled {
 .metric,
 .trafficCard {
   min-width: 0;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(220, 227, 237, 0.82);
   border-radius: 8px;
   background: var(--panel-soft);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease,
+    background 150ms ease;
 }
 
 .metric {
   min-height: 76px;
   padding: 12px;
+}
+
+.metric:hover,
+.trafficCard:hover,
+.wifiInfoItem:hover,
+.portItem:hover,
+.blockedItem:hover {
+  border-color: rgba(19, 111, 99, 0.32);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
 }
 
 .metric span,
@@ -886,6 +958,7 @@ button:disabled {
 
 .metric strong.loadCritical {
   color: var(--bad);
+  animation: criticalPulse 1.7s ease-in-out infinite;
 }
 
 .trafficGrid {
@@ -905,12 +978,16 @@ button:disabled {
   grid-column: 1 / -1;
   min-height: 82px;
   border-color: rgba(19, 111, 99, 0.22);
-  background: linear-gradient(135deg, #ecfdf5, #ffffff);
+  background:
+    linear-gradient(135deg, rgba(236, 253, 245, 0.98), #ffffff),
+    var(--panel);
 }
 
 .highlightTraffic {
   border-color: rgba(109, 40, 217, 0.18);
-  background: linear-gradient(135deg, var(--violet-soft), #ffffff);
+  background:
+    linear-gradient(135deg, rgba(243, 232, 255, 0.96), #ffffff),
+    var(--panel);
 }
 
 .trafficCard strong {
@@ -963,6 +1040,10 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-soft);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
 }
 
 .wifiInfoItem span {
@@ -1036,6 +1117,10 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-soft);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
 }
 
 .blockedItem div {
@@ -1067,6 +1152,11 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-soft);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease,
+    background 150ms ease;
 }
 
 .portItem strong,
@@ -1083,22 +1173,22 @@ button:disabled {
 
 .portItem.active {
   border-color: #94d2bd;
-  background: var(--accent-soft);
+  background: linear-gradient(135deg, var(--accent-soft), #ffffff);
 }
 
 .portItem.uplink {
   border-color: #bfdbfe;
-  background: #eff6ff;
+  background: linear-gradient(135deg, #eff6ff, #ffffff);
 }
 
 .portItem.wan {
   border-color: #f5c26b;
-  background: #fff7e6;
+  background: linear-gradient(135deg, #fff7e6, #ffffff);
 }
 
 .portItem.wifi {
   border-color: #a7f3d0;
-  background: #ecfdf5;
+  background: linear-gradient(135deg, #ecfdf5, #ffffff);
 }
 
 .portItem.down {
@@ -1139,10 +1229,12 @@ button:disabled {
   height: 10px;
   border-radius: 50%;
   background: #aab6c5;
+  box-shadow: 0 0 0 3px rgba(170, 182, 197, 0.16);
 }
 
 .portItem.active .portDot {
   background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(19, 111, 99, 0.13);
 }
 
 .toolbar {
@@ -1158,9 +1250,10 @@ button:disabled {
 .segments {
   display: inline-flex;
   padding: 3px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(220, 227, 237, 0.84);
   border-radius: 8px;
-  background: #eef3f8;
+  background: rgba(238, 243, 248, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
 }
 
 .segment {
@@ -1173,7 +1266,7 @@ button:disabled {
 .segment.active {
   background: var(--panel);
   color: var(--accent);
-  box-shadow: var(--shadow);
+  box-shadow: 0 8px 18px rgba(16, 24, 40, 0.1);
 }
 
 .tableWrap {
@@ -1181,9 +1274,9 @@ button:disabled {
   overflow: auto;
   min-height: 220px;
   max-height: 78vh;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(220, 227, 237, 0.84);
   border-radius: 8px;
-  background: var(--panel);
+  background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--shadow);
 }
 
@@ -1208,6 +1301,18 @@ th {
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
+  background: rgba(249, 251, 253, 0.92);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+tbody tr {
+  transition: background-color 140ms ease;
+}
+
+tbody tr:hover {
+  background: rgba(223, 244, 239, 0.34);
 }
 
 tbody tr:last-child td {
@@ -1228,6 +1333,7 @@ tbody tr:last-child td {
   color: #354154;
   font-size: 12px;
   font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
 }
 
 .pill.wifi {
@@ -1250,6 +1356,16 @@ tbody tr:last-child td {
   border-color: #94d2bd;
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.dangerBtn:hover {
+  border-color: #f08b83;
+  box-shadow: 0 10px 24px rgba(180, 35, 24, 0.12);
+}
+
+.allowBtn:hover {
+  border-color: #62bda3;
+  box-shadow: 0 10px 24px rgba(19, 111, 99, 0.12);
 }
 
 .signal.good {
