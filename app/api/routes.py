@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import re
 import secrets
@@ -63,6 +64,28 @@ from app.models import (
 )
 
 router = APIRouter()
+
+_PUBLIC_IP_CACHE: dict[str, object] = {"expires_at": 0.0, "result": None}
+_OS_UPDATE_CACHE: dict[str, dict[str, object]] = {}
+_PUBLIC_IP_SERVICES = (
+    ("https://api.ipify.org?format=json", "api.ipify.org"),
+    ("https://ifconfig.me/ip", "ifconfig.me"),
+)
+_DNS_BLACKLISTS = (
+    "zen.spamhaus.org",
+    "bl.spamcop.net",
+    "b.barracudacentral.org",
+    "dnsbl.dronebl.org",
+    "dnsbl-1.uceprotect.net",
+    "dnsbl-2.uceprotect.net",
+    "dnsbl-3.uceprotect.net",
+    "psbl.surriel.com",
+    "db.wpbl.info",
+    "bl.mailspike.net",
+    "z.mailspike.net",
+    "rbl.interserver.net",
+)
+_DNSBL_ERROR_CODES = {"127.255.255.252", "127.255.255.254", "127.255.255.255"}
 
 
 def _hash_password(password: str) -> str:
@@ -466,6 +489,26 @@ def diagnose_router(
         raise HTTPException(status_code=404, detail="Router not found")
     status_row = db.get(RouterStatus, router_id)
     client_count = db.scalar(select(func.count()).select_from(CurrentClient).where(CurrentClient.router_id == router_id)) or 0
+    lan_client_count = (
+        db.scalar(
+            select(func.count())
+            .select_from(CurrentClient)
+            .where(CurrentClient.router_id == router_id, CurrentClient.connection_type == "lan")
+        )
+        or 0
+    )
+    lan_traffic_known_count = (
+        db.scalar(
+            select(func.count())
+            .select_from(CurrentClient)
+            .where(
+                CurrentClient.router_id == router_id,
+                CurrentClient.connection_type == "lan",
+                (CurrentClient.rx_bytes.is_not(None) | CurrentClient.tx_bytes.is_not(None)),
+            )
+        )
+        or 0
+    )
     wifi_client_count = (
         db.scalar(
             select(func.count())
@@ -479,6 +522,7 @@ def diagnose_router(
     item, password = _router_credentials(router_id, db)
     internet_ping_result = _run_router_cli_ping(item, password, "8.8.8.8", 3)
     site_result = _run_router_cli_ping(item, password, "google.com", 3)
+    public_ip_result = _public_ip_status()
     rci_result: dict[str, object]
     try:
         with _keenetic_client(item, password, timeout=8.0) as client:
@@ -507,7 +551,9 @@ def diagnose_router(
         warnings.append(f"Client sayı yüksəkdir: {client_count}/150")
     if wifi_client_count > 15:
         warnings.append(f"Wi-Fi client sayı yüksəkdir: {wifi_client_count}/15")
-
+    if public_ip_result.get("public_ip_blacklisted"):
+        hits = ", ".join(public_ip_result.get("public_ip_blacklist_hits") or [])
+        warnings.append(f"Public IP blacklist-dədir: {hits or public_ip_result.get('public_ip')}")
     if not router_ping_result.get("ok"):
         verdict = "Router və ya VPN/routing əlçatmazdır"
         state_value = "critical"
@@ -530,6 +576,11 @@ def diagnose_router(
             "online": online,
             "wan_status": status_row.wan_status if status_row else None,
             "wan_ip": status_row.wan_ip if status_row else None,
+            "wan_ip_private": _is_private_ip(status_row.wan_ip if status_row else None),
+            "public_ip": public_ip_result.get("public_ip"),
+            "public_ip_source": public_ip_result.get("public_ip_source"),
+            "public_ip_blacklisted": public_ip_result.get("public_ip_blacklisted"),
+            "public_ip_blacklist_hits": public_ip_result.get("public_ip_blacklist_hits"),
             "cpu_usage": status_row.cpu_usage if status_row else None,
             "ram_usage": status_row.ram_usage if status_row else None,
             "uptime": status_row.uptime if status_row else None,
@@ -537,12 +588,22 @@ def diagnose_router(
         },
         "client_count": client_count,
         "wifi_client_count": wifi_client_count,
+        "lan_client_count": lan_client_count,
+        "lan_traffic_known_count": lan_traffic_known_count,
         "tests": {
             "router_ping": router_ping_result,
             "rci": rci_result,
             "internet_ping": internet_ping_result,
             "dns": dns_result,
             "site": {**site_result, "method": "router_cli_icmp"},
+            "public_ip_blacklist": {
+                "ok": public_ip_result.get("public_ip_blacklisted") is False,
+                "public_ip": public_ip_result.get("public_ip"),
+                "source": public_ip_result.get("public_ip_source"),
+                "blacklisted": public_ip_result.get("public_ip_blacklisted"),
+                "hits": public_ip_result.get("public_ip_blacklist_hits"),
+                "checked": public_ip_result.get("public_ip_blacklist_checked"),
+            },
         },
         "warnings": warnings,
         "operator_script": _support_script(verdict, warnings),
@@ -961,11 +1022,30 @@ def router_client_metrics(
 
 
 @router.get("/routers/{router_id}/status", response_model=StatusRead)
-def router_status(router_id: str, db: Session = Depends(get_db)) -> RouterStatus:
-    item = db.get(RouterStatus, router_id)
-    if item is None:
+def router_status(router_id: str, db: Session = Depends(get_db)) -> dict[str, object]:
+    status_row = db.get(RouterStatus, router_id)
+    if status_row is None:
         raise HTTPException(status_code=404, detail="Router status not found")
-    return item
+    router_item = db.get(Router, router_id)
+    os_status = _router_os_status(router_item) if router_item is not None else {}
+    public_status = _public_ip_status()
+    return {
+        "router_id": status_row.router_id,
+        "online": status_row.online,
+        "wan_status": status_row.wan_status,
+        "wan_ip": status_row.wan_ip,
+        "wan_ip_private": _is_private_ip(status_row.wan_ip),
+        "firmware_version": router_item.firmware_version if router_item else None,
+        **os_status,
+        **public_status,
+        "cpu_usage": status_row.cpu_usage,
+        "ram_usage": status_row.ram_usage,
+        "uptime": status_row.uptime,
+        "rx_bytes_total": status_row.rx_bytes_total,
+        "tx_bytes_total": status_row.tx_bytes_total,
+        "last_seen": status_row.last_seen,
+        "updated_at": status_row.updated_at,
+    }
 
 
 @router.post("/routers/{router_id}/clients/access")
@@ -1097,6 +1177,113 @@ def test_router(
     return {"status": "ok"}
 
 
+def _router_os_status(item: Router) -> dict[str, object]:
+    cached = _OS_UPDATE_CACHE.get(item.id)
+    now = time.time()
+    if cached and float(cached.get("expires_at", 0)) > now:
+        return dict(cached.get("result") or {})
+
+    result: dict[str, object] = {
+        "os_available_version": None,
+        "os_update_available": None,
+        "os_check_status": "unavailable",
+        "os_check_message": "OS update yoxlaması hələ aparılmayıb",
+    }
+    password = decrypt_secret(item.password_encrypted)
+    if not password:
+        result["os_check_message"] = "Router parolu saxlanmayıb"
+        return result
+    try:
+        with _keenetic_client(item, password, timeout=30.0) as client:
+            components = client.list_components("stable")
+        update = _components_summary(components)
+        result = {
+            "os_available_version": update.get("available_version"),
+            "os_update_available": update.get("update_available"),
+            "os_check_status": "ok",
+            "os_check_message": None,
+        }
+    except Exception as exc:
+        result = {
+            "os_available_version": None,
+            "os_update_available": None,
+            "os_check_status": "error",
+            "os_check_message": str(exc),
+        }
+    _OS_UPDATE_CACHE[item.id] = {"expires_at": now + 1800, "result": result}
+    return result
+
+
+def _public_ip_status() -> dict[str, object]:
+    now = time.time()
+    if float(_PUBLIC_IP_CACHE.get("expires_at", 0)) > now:
+        cached = _PUBLIC_IP_CACHE.get("result")
+        if isinstance(cached, dict):
+            return dict(cached)
+
+    checked_at = utcnow()
+    public_ip = None
+    source = None
+    message = None
+    for url, service_name in _PUBLIC_IP_SERVICES:
+        try:
+            response = httpx.get(url, timeout=5.0, follow_redirects=True)
+            response.raise_for_status()
+            data = response.json() if "json" in response.headers.get("content-type", "") else response.text.strip()
+            value = data.get("ip") if isinstance(data, dict) else data
+            public_ip = str(ipaddress.ip_address(str(value).strip()))
+            source = service_name
+            break
+        except Exception as exc:
+            message = str(exc)
+
+    hits = _dns_blacklist_hits(public_ip) if public_ip else []
+    result = {
+        "public_ip": public_ip,
+        "public_ip_source": source or message or "unavailable",
+        "public_ip_blacklisted": bool(hits) if public_ip else None,
+        "public_ip_blacklist_hits": hits,
+        "public_ip_blacklist_checked": list(_DNS_BLACKLISTS) if public_ip else [],
+        "public_ip_checked_at": checked_at,
+    }
+    _PUBLIC_IP_CACHE.update({"expires_at": now + 900, "result": result})
+    return result
+
+
+def _dns_blacklist_hits(public_ip: str | None) -> list[str]:
+    if not public_ip:
+        return []
+    try:
+        address = ipaddress.ip_address(public_ip)
+    except ValueError:
+        return []
+    if address.version != 4 or address.is_private:
+        return []
+    reversed_ip = ".".join(reversed(public_ip.split(".")))
+    hits: list[str] = []
+    for zone in _DNS_BLACKLISTS:
+        try:
+            _, _, addresses = socket.gethostbyname_ex(f"{reversed_ip}.{zone}")
+            listed_addresses = [address for address in addresses if address not in _DNSBL_ERROR_CODES]
+            if listed_addresses:
+                hits.append(f"{zone} ({', '.join(listed_addresses)})")
+        except socket.gaierror:
+            continue
+        except OSError:
+            continue
+    return hits
+
+
+def _is_private_ip(value: str | None) -> bool | None:
+    if not value:
+        return None
+    ip_text = value.split("/", 1)[0].strip()
+    try:
+        return ipaddress.ip_address(ip_text).is_private
+    except ValueError:
+        return None
+
+
 def _router_credentials(router_id: str, db: Session) -> tuple[Router, str]:
     item = db.get(Router, router_id)
     if item is None:
@@ -1176,18 +1363,20 @@ def _components_summary(data) -> dict[str, object | None]:
 
 
 def _support_script(verdict: str, warnings: list[str]) -> str:
-    lines = [
-        f"Nəticə: {verdict}.",
-        "Abunəçiyə/müəssisəyə bildirin: hazırda əsas şəbəkə testləri yoxlanıldı.",
-    ]
+    lines = ["Operator üçün qeyd:", f"- Ümumi nəticə: {verdict}."]
     if warnings:
-        lines.append("Yoxlanmalı məqamlar: " + "; ".join(warnings) + ".")
+        lines.append("- Yoxlanmalı məqamlar: " + "; ".join(warnings) + ".")
+        lines.append("- Müştəriyə bildirin: ilkin yoxlamada xəbərdarlıq göründü, məsələ texniki tərəfdən araşdırılır.")
     else:
-        lines.append("Router, internet ping, DNS və sayt yoxlaması normal görünür.")
+        lines.append("- Router, internet ping, DNS və sayt yoxlaması normal görünür.")
+        lines.append("- Müştəriyə bildirin: hazırda əsas şəbəkə testləri normaldır.")
     lines.extend(
         [
-            "Növbəti addım: problem bir cihazdadırsa, həmin cihazın Wi-Fi/LAN bağlantısını və IP alıb-almadığını yoxlayın.",
-            "Problem bütün cihazlardadırsa, son diaqnostika nəticəsini first support qrupuna ötürün.",
+            "",
+            "Növbəti addım:",
+            "- Problem bir cihazdadırsa: həmin cihazın Wi-Fi/LAN bağlantısını, IP almasını və gateway/DNS parametrlərini yoxlayın.",
+            "- Problem bütün cihazlardadırsa: son diaqnostika nəticəsini first support qrupuna ötürün.",
+            "- Public IP blacklist-dədirsə: provider/NAT çıxış IP-si üzrə ayrıca ticket açın.",
         ]
     )
     return "\n".join(lines)

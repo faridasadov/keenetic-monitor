@@ -319,12 +319,12 @@
         <section class="panel supportCard" data-card="customer">
           <div class="panelHeader">
             <h2>Müştəri kartı</h2>
-            <span id="supportStatusBadge" class="supportStatusBadge">-</span>
           </div>
           <div class="supportInfoGrid">
             <span>Müəssisə</span><strong id="supportSiteName">-</strong>
             <span>Ünvan</span><strong id="supportAddress">-</strong>
             <span>Məsul şəxs</span><strong id="supportContact">-</strong>
+            <span>Telefon</span><strong id="supportPhone">-</strong>
             <span>Router</span><strong id="supportRouterLine">-</strong>
           </div>
         </section>
@@ -332,7 +332,10 @@
         <section class="panel supportCard" data-card="diagnostics">
           <div class="panelHeader">
             <h2>Bir klik diaqnostika</h2>
-            <button id="diagnoseBtn" type="button">Diaqnostika et</button>
+            <div class="buttonRow">
+              <button id="diagnosticExportBtn" type="button" disabled>Nəticəni çıxart</button>
+              <button id="diagnoseBtn" type="button">Diaqnostika et</button>
+            </div>
           </div>
           <pre id="diagnosticResult" class="supportLog">Diaqnostika nəticəsi burada görünəcək.</pre>
         </section>
@@ -360,6 +363,26 @@
             <article class="metric">
               <span data-i18n="uptime">Uptime</span>
               <strong id="uptimeValue">-</strong>
+            </article>
+            <article class="metric">
+              <span>OS versiya</span>
+              <strong id="osVersionValue">-</strong>
+            </article>
+            <article class="metric">
+              <span>Yeni OS</span>
+              <strong id="osUpdateValue">-</strong>
+            </article>
+            <article class="metric ipMetric">
+              <span>WAN IP</span>
+              <strong id="wanIpValue">-</strong>
+            </article>
+            <article class="metric ipMetric">
+              <span>Public IP</span>
+              <strong id="publicIpValue">-</strong>
+            </article>
+            <article class="metric">
+              <span>Blacklist</span>
+              <strong id="blacklistValue">-</strong>
             </article>
           </div>
         </section>

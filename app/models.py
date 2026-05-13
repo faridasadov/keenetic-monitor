@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -391,6 +391,18 @@ class StatusRead(BaseModel):
     online: bool
     wan_status: str | None
     wan_ip: str | None
+    wan_ip_private: bool | None = None
+    firmware_version: str | None = None
+    os_available_version: str | None = None
+    os_update_available: bool | None = None
+    os_check_status: Literal["ok", "unavailable", "error"] | None = None
+    os_check_message: str | None = None
+    public_ip: str | None = None
+    public_ip_source: str | None = None
+    public_ip_blacklisted: bool | None = None
+    public_ip_blacklist_hits: list[str] = Field(default_factory=list)
+    public_ip_blacklist_checked: list[str] = Field(default_factory=list)
+    public_ip_checked_at: datetime | None = None
     cpu_usage: float | None
     ram_usage: float | None
     uptime: int | None

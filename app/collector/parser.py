@@ -381,8 +381,8 @@ def parse_clients(
             "ip": ip or lease.get("ip") or lease.get("address"),
             "interface": interface or lease.get("interface"),
             "connection_type": "lan",
-            "rx_bytes": None,
-            "tx_bytes": None,
+            "rx_bytes": _client_rx_bytes(row) or _client_rx_bytes(lease),
+            "tx_bytes": _client_tx_bytes(row) or _client_tx_bytes(lease),
             "signal": None,
             "last_seen": ts,
         }
@@ -400,7 +400,7 @@ def parse_clients(
         key = mac or str(row.get("ip") or "")
         if not key:
             continue
-        lease = lease_index.get(mac or "") or lease_index.get(str(row.get("ip") or ""))
+        lease = lease_index.get(mac or "") or lease_index.get(str(row.get("ip") or "")) or {}
         client = seen.setdefault(key, {"router_id": router_id, "mac": mac, "last_seen": ts})
         client.update(
             {
@@ -408,8 +408,8 @@ def parse_clients(
                 "ip": client.get("ip") or row.get("ip") or lease.get("ip") or lease.get("address"),
                 "interface": row.get("interface") or row.get("ap") or client.get("interface"),
                 "connection_type": "wifi",
-                "rx_bytes": _as_int(row.get("rxbytes") or row.get("rx-bytes")),
-                "tx_bytes": _as_int(row.get("txbytes") or row.get("tx-bytes")),
+                "rx_bytes": _client_rx_bytes(row) or client.get("rx_bytes"),
+                "tx_bytes": _client_tx_bytes(row) or client.get("tx_bytes"),
                 "signal": _as_int(row.get("rssi") or row.get("signal")),
                 "last_seen": ts,
             }
@@ -427,14 +427,42 @@ def parse_clients(
                 "ip": client.get("ip") or row.get("address") or client.get("ip"),
                 "interface": row.get("interface") or client.get("interface"),
                 "connection_type": client.get("connection_type") or "unknown",
-                "rx_bytes": _as_int(row.get("rxbytes") or row.get("rx-bytes")) or client.get("rx_bytes"),
-                "tx_bytes": _as_int(row.get("txbytes") or row.get("tx-bytes")) or client.get("tx_bytes"),
+                "rx_bytes": _client_rx_bytes(row) or client.get("rx_bytes"),
+                "tx_bytes": _client_tx_bytes(row) or client.get("tx_bytes"),
                 "signal": client.get("signal"),
                 "last_seen": ts,
             }
         )
 
     return list(seen.values())
+
+
+def _client_rx_bytes(row: dict[str, Any] | None) -> int | None:
+    if not isinstance(row, dict):
+        return None
+    return _as_int(
+        row.get("rxbytes")
+        or row.get("rx-bytes")
+        or row.get("ibytes")
+        or row.get("in-bytes")
+        or row.get("bytes-in")
+        or row.get("received")
+        or row.get("rx")
+    )
+
+
+def _client_tx_bytes(row: dict[str, Any] | None) -> int | None:
+    if not isinstance(row, dict):
+        return None
+    return _as_int(
+        row.get("txbytes")
+        or row.get("tx-bytes")
+        or row.get("obytes")
+        or row.get("out-bytes")
+        or row.get("bytes-out")
+        or row.get("sent")
+        or row.get("tx")
+    )
 
 
 def _rows(payload: Any) -> list[dict[str, Any]]:

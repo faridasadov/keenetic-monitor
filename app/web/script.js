@@ -111,6 +111,11 @@ const els = {
   cpuValue: document.querySelector("#cpuValue"),
   ramValue: document.querySelector("#ramValue"),
   uptimeValue: document.querySelector("#uptimeValue"),
+  osVersionValue: document.querySelector("#osVersionValue"),
+  osUpdateValue: document.querySelector("#osUpdateValue"),
+  wanIpValue: document.querySelector("#wanIpValue"),
+  publicIpValue: document.querySelector("#publicIpValue"),
+  blacklistValue: document.querySelector("#blacklistValue"),
   totalTrafficValue: document.querySelector("#totalTrafficValue"),
   lanTrafficValue: document.querySelector("#lanTrafficValue"),
   wifiTrafficValue: document.querySelector("#wifiTrafficValue"),
@@ -127,12 +132,13 @@ const els = {
   actionMessage: document.querySelector("#actionMessage"),
   alertBar: document.querySelector("#alertBar"),
   dashboardGrid: document.querySelector("#dashboardGrid"),
-  supportStatusBadge: document.querySelector("#supportStatusBadge"),
   supportSiteName: document.querySelector("#supportSiteName"),
   supportAddress: document.querySelector("#supportAddress"),
   supportContact: document.querySelector("#supportContact"),
+  supportPhone: document.querySelector("#supportPhone"),
   supportRouterLine: document.querySelector("#supportRouterLine"),
   diagnoseBtn: document.querySelector("#diagnoseBtn"),
+  diagnosticExportBtn: document.querySelector("#diagnosticExportBtn"),
   diagnosticResult: document.querySelector("#diagnosticResult"),
   portsList: document.querySelector("#portsList"),
   blockedList: document.querySelector("#blockedList"),
@@ -1115,11 +1121,46 @@ function renderMetrics(status, summary) {
   els.ramValue.textContent = formatPercent(status?.ram_usage);
   setLoadClass(els.ramValue, status?.ram_usage);
   els.uptimeValue.textContent = formatUptime(status?.uptime);
+  els.osVersionValue.textContent = status?.firmware_version || router?.firmware_version || "-";
+  els.osUpdateValue.textContent = formatOsUpdate(status);
+  els.osUpdateValue.title = status?.os_check_message || "";
+  els.osUpdateValue.classList.remove("loadNormal", "loadWarning", "loadCritical");
+  els.osUpdateValue.classList.toggle("loadWarning", Boolean(status?.os_update_available));
+  els.osUpdateValue.classList.toggle("loadNormal", status?.os_update_available === false);
+  els.wanIpValue.textContent = formatWanIp(status);
+  els.wanIpValue.title = status?.wan_ip_private ? "Router WAN-da private IP alır" : "";
+  els.publicIpValue.textContent = status?.public_ip || "-";
+  els.publicIpValue.title = status?.public_ip_source ? `Mənbə: ${status.public_ip_source}` : "";
+  els.blacklistValue.textContent = formatBlacklist(status);
+  els.blacklistValue.title = status?.public_ip_blacklist_hits?.join(", ") || "";
+  els.blacklistValue.classList.remove("loadNormal", "loadWarning", "loadCritical");
+  els.blacklistValue.classList.toggle("loadCritical", Boolean(status?.public_ip_blacklisted));
+  els.blacklistValue.classList.toggle("loadNormal", status?.public_ip_blacklisted === false);
   els.totalTrafficValue.innerHTML = formatTrafficPair(summary?.total_rx_bps, summary?.total_tx_bps);
   els.lanTrafficValue.innerHTML = formatTrafficPair(summary?.lan_rx_bps, summary?.lan_tx_bps);
   els.wifiTrafficValue.innerHTML = formatTrafficPair(summary?.wifi_rx_bps, summary?.wifi_tx_bps);
   els.maxTrafficValue.textContent = formatBits(summary?.max_traffic_bps);
   els.maxClientValue.textContent = String(summary?.max_client_count ?? summary?.client_count ?? state.clients.length);
+}
+
+function formatOsUpdate(status) {
+  if (!status) return "-";
+  if (status.os_update_available) return status.os_available_version || "Var";
+  if (status.os_update_available === false) return "Yoxdur";
+  if (status.os_check_status === "error") return "Yoxlanmadı";
+  return "-";
+}
+
+function formatWanIp(status) {
+  if (!status?.wan_ip) return "-";
+  return status.wan_ip;
+}
+
+function formatBlacklist(status) {
+  if (!status?.public_ip) return "-";
+  if (status.public_ip_blacklisted) return `Listdədir (${status.public_ip_blacklist_hits?.length || 1})`;
+  if (status.public_ip_blacklisted === false) return "Təmiz";
+  return "Yoxlanmadı";
 }
 
 function setLoadClass(element, value) {
@@ -1138,17 +1179,17 @@ function setLoadClass(element, value) {
 function renderSupportPanel() {
   const router = state.routers.find((item) => item.id === state.selectedRouterId);
   const lastDiagnostic = state.diagnostics[0];
-  const badgeState = lastDiagnostic?.status || router?.support_status || "normal";
-  els.supportStatusBadge.textContent = badgeState;
-  els.supportStatusBadge.className = `supportStatusBadge ${badgeState}`;
   els.supportSiteName.textContent = router?.name || "-";
   els.supportAddress.textContent = router?.address || router?.description || "-";
-  els.supportContact.textContent = [router?.contact_name, router?.contact_phone].filter(Boolean).join(" · ") || "-";
+  els.supportContact.textContent = router?.contact_name || "-";
+  els.supportPhone.textContent = router?.contact_phone || "-";
   els.supportRouterLine.textContent = router ? `${router.host} · ${router.model || "-"} · ${router.firmware_version || "-"}` : "-";
   if (lastDiagnostic) {
     els.diagnosticResult.textContent = formatDiagnostic(lastDiagnostic);
+    els.diagnosticExportBtn.disabled = false;
   } else {
     els.diagnosticResult.textContent = "Diaqnostika nəticəsi burada görünəcək.";
+    els.diagnosticExportBtn.disabled = true;
   }
 }
 
@@ -1168,9 +1209,11 @@ function formatDiagnostic(row) {
     "",
     "STATUS",
     `Vəziyyət: ${row.status.toUpperCase()} · ${formatTime(row.created_at)} · ${row.created_by || "-"}`,
-    `WAN: ${status.wan_status || "-"} · ${status.wan_ip || "-"}`,
+    `WAN: ${status.wan_status || "-"} · ${status.wan_ip || "-"}${status.wan_ip_private ? " · private" : ""}`,
+    `Public IP: ${status.public_ip || "-"} · blacklist: ${formatDiagnosticBlacklist(status)}`,
     `Resurs: CPU ${formatPercent(status.cpu_usage)} · RAM ${formatPercent(status.ram_usage)} · Uptime ${formatUptime(status.uptime)}`,
-    `Client sayı: ${result.client_count ?? "-"} · Wi-Fi ${result.wifi_client_count ?? "-"}`,
+    `Client sayı: ${result.client_count ?? "-"} · Wi-Fi ${result.wifi_client_count ?? "-"} · LAN ${result.lan_client_count ?? "-"}`,
+    `LAN fərdi trafik: ${result.lan_traffic_known_count ?? 0}/${result.lan_client_count ?? 0}`,
     "",
     "TESTLƏR",
     testLine("Router ping", tests.router_ping),
@@ -1178,13 +1221,22 @@ function formatDiagnostic(row) {
     testLine("Internet ping", tests.internet_ping),
     testLine("DNS", tests.dns),
     testLine("Sayt ping", tests.site),
+    `Public blacklist  ${tests.public_ip_blacklist?.blacklisted ? "FAIL" : "OK"} · ${tests.public_ip_blacklist?.public_ip || "-"}`,
+    `Yoxlanan listlər  ${(tests.public_ip_blacklist?.checked || []).length || "-"} DNSBL`,
     "",
     "XƏBƏRDARLIQ",
     warnings.length ? warnings.join("; ") : "Yoxdur",
     "",
-    "OPERATOR QEYDİ",
+    "OPERATOR ÜÇÜN QEYD VƏ NÖVBƏTİ ADDIM",
     result.operator_script || "",
   ].join("\n");
+}
+
+function formatDiagnosticBlacklist(status) {
+  if (!status?.public_ip) return "-";
+  if (status.public_ip_blacklisted) return `listdədir (${(status.public_ip_blacklist_hits || []).join(", ") || "naməlum"})`;
+  if (status.public_ip_blacklisted === false) return "təmiz";
+  return "yoxlanmadı";
 }
 
 async function runOneClickDiagnostic() {
@@ -1289,8 +1341,8 @@ function renderClients() {
           <td>${escapeHtml(client.mac || "-")}</td>
           <td><span class="pill ${connection === "wifi" ? "wifi" : connection === "lan" ? "lan" : ""}">${escapeHtml(connectionLabel)}</span></td>
           <td class="signal ${signalClass(client.signal)}">${signal}</td>
-          <td>${client.rx_speed}<div class="muted">${formatBytes(client.rx_bytes)}</div></td>
-          <td>${client.tx_speed}<div class="muted">${formatBytes(client.tx_bytes)}</div></td>
+          <td>${formatClientSpeed(client.rx_speed, client.rx_bytes)}<div class="muted">${formatClientBytes(client.rx_bytes)}</div></td>
+          <td>${formatClientSpeed(client.tx_speed, client.tx_bytes)}<div class="muted">${formatClientBytes(client.tx_bytes)}</div></td>
           <td>${renderSparkline(client)}</td>
           <td>${formatTime(client.last_seen)}</td>
           <td>${renderClientAction(client)}</td>
@@ -1298,6 +1350,16 @@ function renderClients() {
       `;
     })
     .join("");
+}
+
+function formatClientSpeed(speed, bytes) {
+  if (bytes === null || bytes === undefined) return '<span class="muted">məlumat yoxdur</span>';
+  return escapeHtml(speed || "-");
+}
+
+function formatClientBytes(bytes) {
+  if (bytes === null || bytes === undefined) return "router vermir";
+  return formatBytes(bytes);
 }
 
 function renderEmpty(message) {
@@ -1764,6 +1826,11 @@ els.diagnoseBtn.addEventListener("click", () => {
     els.diagnosticResult.textContent = error.message;
     els.diagnoseBtn.disabled = false;
   });
+});
+els.diagnosticExportBtn.addEventListener("click", () => {
+  const router = state.routers.find((item) => item.id === state.selectedRouterId);
+  const name = (router?.name || "router").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-|-$/g, "") || "router";
+  exportText(`diagnostic-${name}.txt`, els.diagnosticResult.textContent || "");
 });
 els.searchInput.addEventListener("input", () => {
   state.search = els.searchInput.value;
