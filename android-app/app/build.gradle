@@ -1,0 +1,47 @@
+plugins {
+    id "com.android.application"
+}
+
+def dashboardUrl = providers.gradleProperty("dashboardUrl")
+        .orElse(providers.environmentVariable("DASHBOARD_URL"))
+        .orElse("http://10.0.2.2:8000")
+        .get()
+
+android {
+    namespace "az.keenetic.monitor"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "az.keenetic.monitor"
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName "1.0.0"
+        buildConfigField "String", "DASHBOARD_URL", "\"${dashboardUrl}\""
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            storeFile file(System.getenv("ANDROID_KEYSTORE") ?: "release.keystore")
+            storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: ""
+            keyAlias System.getenv("ANDROID_KEY_ALIAS") ?: "keenetic-monitor"
+            keyPassword System.getenv("ANDROID_KEY_PASSWORD") ?: ""
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+}
